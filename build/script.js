@@ -11,37 +11,48 @@ class POSSystem {
     constructor() {
         this.products = [];
         this.cart = [];
+        this.cacheRefreshInterval = null;
+        this.cacheRefreshTimeout = null;
         this.init();
     }
 
     async init() {
         this.setupEventListeners();
         
-        // Check if we should fetch fresh data
-        if (this.shouldFetchFreshData()) {
-            // Cache is old or doesn't exist, fetch fresh data
-            console.log('Fetching fresh data...');
-            await this.loadProducts();
-        } else {
-            // Cache is fresh, load from cache
-            if (this.loadProductsFromCache()) {
-                console.log('Using cached products (cache is fresh)');
-                this.displayProductsList();
-                this.handleSearch('');
-                this.updateLastViewTime();
+        // Step 1: Always check cache first on page load
+        const hasCache = this.loadProductsFromCache();
+        
+        if (hasCache) {
+            // Cache exists - use it immediately
+            console.log('Loaded products from cache');
+            this.displayProductsList();
+            this.handleSearch('');
+            this.updateLastViewTime();
+            
+            // Check if cache is stale, if so fetch fresh data in background
+            if (this.isCacheStale()) {
+                console.log('Cache is stale, fetching fresh data in background...');
+                this.loadProducts(true); // silent = true (no loading overlay)
             } else {
-                // No cache exists, fetch fresh data
-                await this.loadProducts();
+                // Cache is fresh, but set up refresh for when it becomes stale
+                this.scheduleCacheRefresh();
             }
+        } else {
+            // No cache exists - fetch data first, then save to cache
+            console.log('No cache found, fetching products...');
+            await this.loadProducts(false); // silent = false (show loading overlay)
         }
+        
+        // Set up periodic cache refresh (every 5 minutes)
+        this.setupPeriodicRefresh();
     }
     
-    // Check if we should fetch fresh data (cache is old or doesn't exist)
-    shouldFetchFreshData() {
+    // Check if cache is stale (older than 5 minutes)
+    isCacheStale() {
         try {
             const cacheTimestamp = localStorage.getItem(CACHE_TIMESTAMP_KEY);
             
-            // If no cache timestamp, fetch fresh data
+            // If no cache timestamp, it's stale
             if (!cacheTimestamp) {
                 return true;
             }
@@ -50,12 +61,54 @@ class POSSystem {
             const now = Date.now();
             const timeSinceCache = now - cacheTime;
             
-            // If cache is older than 5 minutes, fetch fresh data
+            // Cache is stale if older than 5 minutes
             return timeSinceCache >= CACHE_DURATION_MS;
         } catch (error) {
-            console.error('Error checking cache timestamp:', error);
-            return true; // On error, fetch fresh data to be safe
+            console.error('Error checking cache staleness:', error);
+            return true; // On error, consider it stale
         }
+    }
+    
+    // Schedule cache refresh when current cache becomes stale
+    scheduleCacheRefresh() {
+        try {
+            const cacheTimestamp = localStorage.getItem(CACHE_TIMESTAMP_KEY);
+            if (!cacheTimestamp) return;
+            
+            const cacheTime = parseInt(cacheTimestamp, 10);
+            const now = Date.now();
+            const timeSinceCache = now - cacheTime;
+            const timeUntilStale = CACHE_DURATION_MS - timeSinceCache;
+            
+            if (timeUntilStale > 0) {
+                // Clear any existing timeout
+                if (this.cacheRefreshTimeout) {
+                    clearTimeout(this.cacheRefreshTimeout);
+                }
+                
+                // Schedule refresh for when cache becomes stale
+                this.cacheRefreshTimeout = setTimeout(() => {
+                    console.log('Cache became stale, refreshing in background...');
+                    this.loadProducts(true); // silent refresh
+                }, timeUntilStale);
+            }
+        } catch (error) {
+            console.error('Error scheduling cache refresh:', error);
+        }
+    }
+    
+    // Set up periodic refresh every 5 minutes
+    setupPeriodicRefresh() {
+        // Clear any existing interval
+        if (this.cacheRefreshInterval) {
+            clearInterval(this.cacheRefreshInterval);
+        }
+        
+        // Refresh cache every 5 minutes
+        this.cacheRefreshInterval = setInterval(() => {
+            console.log('Periodic cache refresh (every 5 minutes)...');
+            this.loadProducts(true); // silent refresh
+        }, CACHE_DURATION_MS);
     }
     
     // Update last view timestamp
@@ -146,12 +199,16 @@ class POSSystem {
         });
     }
 
-    async loadProducts() {
+    async loadProducts(silent = false) {
         const loadingOverlay = document.getElementById('loadingOverlay');
-        loadingOverlay.style.display = 'flex';
+        
+        // Only show loading overlay if not silent (first load or user-triggered)
+        if (!silent) {
+            loadingOverlay.style.display = 'flex';
+        }
 
         try {
-            if (!STORE_PRODUCTS_URL || STORE_PRODUCTS_URL === 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR7f9Ungw0dtrY5x0RUeCpxdqe5dRiOYWBoQMMUYESZil607WXSTVYKyBxchrK_vY-NUMdsb5H4Iwgv/pub?gid=1244670162&single=true&output=csv' || STORE_PRODUCTS_URL.trim() === '') {
+            if (!STORE_PRODUCTS_URL || STORE_PRODUCTS_URL === '{{STORE_PRODUCTS}}' || STORE_PRODUCTS_URL.trim() === '') {
                 throw new Error('STORE_PRODUCTS URL not configured. Please run generate-config.js or set environment variable.');
             }
 
@@ -193,11 +250,24 @@ class POSSystem {
                     this.saveProductsToCache(this.products);
                     
                     console.log(`✓ Loaded ${this.products.length} products`);
+                    
+                    // Hide loading overlay
                     loadingOverlay.style.display = 'none';
                     
-                    // Show products and initialize search
-                    this.displayProductsList();
-                    this.handleSearch('');
+                    // Update UI (only if not silent, or if products changed)
+                    if (!silent) {
+                        this.displayProductsList();
+                        this.handleSearch('');
+                    } else {
+                        // Silent refresh - update UI if products changed
+                        const currentSearch = document.getElementById('productSearch').value;
+                        this.displayProductsList();
+                        this.handleSearch(currentSearch);
+                        console.log('Cache refreshed silently');
+                    }
+                    
+                    // Schedule next refresh
+                    this.scheduleCacheRefresh();
                 },
                 error: (error) => {
                     console.error('Error loading products:', error);
@@ -206,12 +276,17 @@ class POSSystem {
                     // If we have cached data, use it instead of showing error
                     if (this.cacheExists() && this.products.length > 0) {
                         console.log('Using cached products due to fetch error');
-                        this.displayProductsList();
-                        this.handleSearch('');
+                        if (!silent) {
+                            this.displayProductsList();
+                            this.handleSearch('');
+                        }
                         return;
                     }
                     
-                    alert(`Failed to load products:\n\n${error.message || 'Unknown error occurred'}\n\nPlease check:\n1. The STORE_PRODUCTS URL in your .env file\n2. Browser console for more details\n3. That the Google Sheet is published as CSV`);
+                    // Only show alert if not silent (first load)
+                    if (!silent) {
+                        alert(`Failed to load products:\n\n${error.message || 'Unknown error occurred'}\n\nPlease check:\n1. The STORE_PRODUCTS URL in your .env file\n2. Browser console for more details\n3. That the Google Sheet is published as CSV`);
+                    }
                 }
             });
         } catch (error) {
@@ -221,13 +296,18 @@ class POSSystem {
             // If we have cached data, use it instead of showing error
             if (this.cacheExists() && this.products.length > 0) {
                 console.log('Using cached products due to error');
-                this.displayProductsList();
-                this.handleSearch('');
+                if (!silent) {
+                    this.displayProductsList();
+                    this.handleSearch('');
+                }
                 return;
             }
             
-            const errorMessage = error.message || 'Unknown error occurred';
-            alert(`Failed to load products:\n\n${errorMessage}\n\nPlease check:\n1. The STORE_PRODUCTS URL in your .env file\n2. Browser console for more details\n3. Network tab to see if the request succeeded`);
+            // Only show alert if not silent (first load)
+            if (!silent) {
+                const errorMessage = error.message || 'Unknown error occurred';
+                alert(`Failed to load products:\n\n${errorMessage}\n\nPlease check:\n1. The STORE_PRODUCTS URL in your .env file\n2. Browser console for more details\n3. Network tab to see if the request succeeded`);
+            }
         }
     }
 
