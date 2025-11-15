@@ -1,5 +1,5 @@
 // Store Products CSV URL - will be replaced by generate-config.js
-const STORE_PRODUCTS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR7f9Ungw0dtrY5x0RUeCpxdqe5dRiOYWBoQMMUYESZil607WXSTVYKyBxchrK_vY-NUMdsb5H4Iwgv/pub?gid=1244670162&single=true&output=csv';
+const STORE_PRODUCTS_URL = '{{STORE_PRODUCTS}}';
 
 class POSSystem {
     constructor() {

@@ -16,16 +16,14 @@ fi
 # Navigate to project root
 cd "$(dirname "$0")"
 
-echo -e "${BLUE}📦 Building project...${NC}"
-
-# Check if .env exists in build directory (for local build)
-if [ -f "build/.env" ]; then
-    echo -e "${BLUE}   Using local .env file${NC}"
+# Restore placeholder in script.js before committing (keep source clean)
+if [ -f "build/script.js" ]; then
+    echo -e "${BLUE}📦 Restoring placeholder in script.js...${NC}"
     cd build
-    node generate-config.js
+    # Restore the placeholder
+    sed -i.bak "s|const STORE_PRODUCTS_URL = '.*';|const STORE_PRODUCTS_URL = '{{STORE_PRODUCTS}}';|" script.js
+    rm -f script.js.bak
     cd ..
-else
-    echo -e "${YELLOW}   ⚠️  No local .env found - will use environment variables during Cloudflare Pages build${NC}"
 fi
 
 echo -e "${BLUE}📦 Staging changes...${NC}"
