@@ -313,16 +313,15 @@ class POSSystem {
         );
 
         if (this.searchResults.length === 0) {
-            searchResultsDiv.innerHTML = '<div class="no-results">No products found</div>';
-            searchResultsDiv.style.display = 'block';
-            this.displayProductsList([]); // Clear products list
+            searchResultsDiv.style.display = 'none';
+            this.displayProductsList([]); // Show "No products found" in products list only
             return;
         }
 
         this.displaySearchResults(searchResultsDiv, query, true);
         this.displayProductsList(this.searchResults, query); // Update products list with filtered results
     }
-
+    
     displayProductsList(productsToShow = null, searchQuery = '') {
         const productsListDiv = document.getElementById('productsList');
         const productsToDisplay = productsToShow || this.products;
@@ -350,6 +349,7 @@ class POSSystem {
             });
         });
     }
+
 
     displaySearchResults(searchResultsDiv, query, highlight) {
         const maxResults = 50; // Limit display to 50 results
@@ -440,16 +440,21 @@ class POSSystem {
         } else {
             cartItemsDiv.innerHTML = this.cart.map((item, index) => `
                 <div class="cart-item">
-                    <div class="cart-item-info">
-                        <span class="cart-item-name">${item.name}</span>
-                        <span class="cart-item-rate">₹${item.rate.toFixed(2)} each</span>
+                    <div class="cart-item-row">
+                        <div class="cart-item-info">
+                            <span class="cart-item-name">${item.name}</span>
+                            <span class="cart-item-rate">₹${item.rate.toFixed(2)} each</span>
+                        </div>
+                        <div class="cart-item-right">
+                            <button class="remove-btn remove-btn-desktop" onclick="pos.removeFromCart(${index})" title="Remove">×</button>
+                            <span class="cart-item-total">₹${(item.rate * item.quantity).toFixed(2)}</span>
+                        </div>
                     </div>
                     <div class="cart-item-controls">
+                        <button class="remove-btn remove-btn-mobile" onclick="pos.removeFromCart(${index})" title="Remove">×</button>
                         <button class="qty-btn" onclick="pos.updateQuantity(${index}, -1)">−</button>
                         <span class="cart-item-qty">${item.quantity}</span>
                         <button class="qty-btn" onclick="pos.updateQuantity(${index}, 1)">+</button>
-                        <span class="cart-item-total">₹${(item.rate * item.quantity).toFixed(2)}</span>
-                        <button class="remove-btn" onclick="pos.removeFromCart(${index})" title="Remove">×</button>
                     </div>
                 </div>
             `).join('');
