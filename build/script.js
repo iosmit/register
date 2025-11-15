@@ -1,6 +1,12 @@
 // Store Products CSV URL - will be replaced by generate-config.js
 const STORE_PRODUCTS_URL = '{{STORE_PRODUCTS}}';
 
+// Cache keys
+const PRODUCTS_CACHE_KEY = 'storeProductsCache';
+const CACHE_TIMESTAMP_KEY = 'storeProductsCacheTimestamp';
+const LAST_VIEW_KEY = 'storeProductsLastView';
+const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes in milliseconds
+
 class POSSystem {
     constructor() {
         this.products = [];
@@ -10,7 +16,100 @@ class POSSystem {
 
     async init() {
         this.setupEventListeners();
-        await this.loadProducts();
+        
+        // Check if we should fetch fresh data
+        if (this.shouldFetchFreshData()) {
+            // Cache is old or doesn't exist, fetch fresh data
+            console.log('Fetching fresh data...');
+            await this.loadProducts();
+        } else {
+            // Cache is fresh, load from cache
+            if (this.loadProductsFromCache()) {
+                console.log('Using cached products (cache is fresh)');
+                this.displayProductsList();
+                this.handleSearch('');
+                this.updateLastViewTime();
+            } else {
+                // No cache exists, fetch fresh data
+                await this.loadProducts();
+            }
+        }
+    }
+    
+    // Check if we should fetch fresh data (cache is old or doesn't exist)
+    shouldFetchFreshData() {
+        try {
+            const cacheTimestamp = localStorage.getItem(CACHE_TIMESTAMP_KEY);
+            
+            // If no cache timestamp, fetch fresh data
+            if (!cacheTimestamp) {
+                return true;
+            }
+            
+            const cacheTime = parseInt(cacheTimestamp, 10);
+            const now = Date.now();
+            const timeSinceCache = now - cacheTime;
+            
+            // If cache is older than 5 minutes, fetch fresh data
+            return timeSinceCache >= CACHE_DURATION_MS;
+        } catch (error) {
+            console.error('Error checking cache timestamp:', error);
+            return true; // On error, fetch fresh data to be safe
+        }
+    }
+    
+    // Update last view timestamp
+    updateLastViewTime() {
+        try {
+            localStorage.setItem(LAST_VIEW_KEY, Date.now().toString());
+        } catch (error) {
+            console.error('Error updating last view time:', error);
+        }
+    }
+    
+    // Check if cache exists
+    cacheExists() {
+        try {
+            const cachedData = localStorage.getItem(PRODUCTS_CACHE_KEY);
+            return cachedData !== null;
+        } catch (error) {
+            return false;
+        }
+    }
+    
+    // Load products from cache
+    loadProductsFromCache() {
+        try {
+            const cachedData = localStorage.getItem(PRODUCTS_CACHE_KEY);
+            if (!cachedData) {
+                return false;
+            }
+            
+            const data = JSON.parse(cachedData);
+            console.log('Loading products from cache:', data.length);
+            
+            this.products = data;
+            
+            // Update last view time when loading from cache
+            this.updateLastViewTime();
+            
+            return true;
+        } catch (error) {
+            console.error('Error loading from cache:', error);
+            return false;
+        }
+    }
+    
+    // Save products to cache
+    saveProductsToCache(products) {
+        try {
+            localStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(products));
+            localStorage.setItem(CACHE_TIMESTAMP_KEY, Date.now().toString());
+            this.updateLastViewTime(); // Update last view time when saving fresh data
+            console.log('Saved products to cache:', products.length);
+        } catch (error) {
+            console.error('Error saving to cache:', error);
+        }
     }
 
     setupEventListeners() {
@@ -67,7 +166,7 @@ class POSSystem {
                     console.log('CSV parsed successfully:', results.data.length, 'rows');
                     
                     // Parse the CSV data into products
-                    this.products = results.data
+                    const newProducts = results.data
                         .filter(row => {
                             // Check if row has PRODUCT and RATE columns
                             const product = row.PRODUCT || row.product || '';
@@ -83,9 +182,15 @@ class POSSystem {
                             };
                         });
                     
-                    if (this.products.length === 0) {
+                    if (newProducts.length === 0) {
                         throw new Error('No products found in CSV. Please check the CSV format. Expected columns: PRODUCT, RATE');
                     }
+                    
+                    // Update products
+                    this.products = newProducts;
+                    
+                    // Save to cache
+                    this.saveProductsToCache(this.products);
                     
                     console.log(`✓ Loaded ${this.products.length} products`);
                     loadingOverlay.style.display = 'none';
@@ -97,13 +202,31 @@ class POSSystem {
                 error: (error) => {
                     console.error('Error loading products:', error);
                     loadingOverlay.style.display = 'none';
+                    
+                    // If we have cached data, use it instead of showing error
+                    if (this.cacheExists() && this.products.length > 0) {
+                        console.log('Using cached products due to fetch error');
+                        this.displayProductsList();
+                        this.handleSearch('');
+                        return;
+                    }
+                    
                     alert(`Failed to load products:\n\n${error.message || 'Unknown error occurred'}\n\nPlease check:\n1. The STORE_PRODUCTS URL in your .env file\n2. Browser console for more details\n3. That the Google Sheet is published as CSV`);
                 }
             });
         } catch (error) {
             console.error('Error loading products:', error);
-            const errorMessage = error.message || 'Unknown error occurred';
             loadingOverlay.style.display = 'none';
+            
+            // If we have cached data, use it instead of showing error
+            if (this.cacheExists() && this.products.length > 0) {
+                console.log('Using cached products due to error');
+                this.displayProductsList();
+                this.handleSearch('');
+                return;
+            }
+            
+            const errorMessage = error.message || 'Unknown error occurred';
             alert(`Failed to load products:\n\n${errorMessage}\n\nPlease check:\n1. The STORE_PRODUCTS URL in your .env file\n2. Browser console for more details\n3. Network tab to see if the request succeeded`);
         }
     }
