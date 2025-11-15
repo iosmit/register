@@ -26,7 +26,6 @@ class POSSystem {
         
         if (hasCache) {
             // Cache exists - use it immediately
-            this.displayProductsList();
             this.handleSearch('');
             this.updateLastViewTime();
             
@@ -159,29 +158,24 @@ class POSSystem {
 
     setupEventListeners() {
         const searchInput = document.getElementById('productSearch');
-        const checkoutBtn = document.getElementById('checkoutBtn');
-        const clearCartBtn = document.getElementById('clearCartBtn');
-        const closeReceipt = document.getElementById('closeReceipt');
-        const printReceipt = document.getElementById('printReceipt');
-        const newTransaction = document.getElementById('newTransaction');
+            const checkoutBtn = document.getElementById('checkoutBtn');
+            const clearCartBtn = document.getElementById('clearCartBtn');
+            const closeReceipt = document.getElementById('closeReceipt');
+            const printReceipt = document.getElementById('printReceipt');
 
-        searchInput.addEventListener('input', (e) => this.handleSearch(e.target.value));
-        searchInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && this.searchResults.length > 0) {
-                this.addToCart(this.searchResults[0]);
-                searchInput.value = '';
-                this.clearSearchResults();
-            }
-        });
+            searchInput.addEventListener('input', (e) => this.handleSearch(e.target.value));
+            searchInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && this.searchResults.length > 0) {
+                    this.addToCart(this.searchResults[0]);
+                    searchInput.value = '';
+                    this.clearSearchResults();
+                }
+            });
 
-        checkoutBtn.addEventListener('click', () => this.showReceipt());
-        clearCartBtn.addEventListener('click', () => this.clearCart());
-        closeReceipt.addEventListener('click', () => this.closeReceipt());
-        printReceipt.addEventListener('click', () => window.print());
-        newTransaction.addEventListener('click', () => {
-            this.clearCart();
-            this.closeReceipt();
-        });
+            checkoutBtn.addEventListener('click', () => this.showReceipt());
+            clearCartBtn.addEventListener('click', () => this.clearCart());
+            closeReceipt.addEventListener('click', () => this.closeReceipt());
+            printReceipt.addEventListener('click', () => window.print());
 
         // Close modal when clicking outside
         document.getElementById('receiptModal').addEventListener('click', (e) => {
@@ -242,12 +236,10 @@ class POSSystem {
                     
                     // Update UI (only if not silent, or if products changed)
                     if (!silent) {
-                        this.displayProductsList();
                         this.handleSearch('');
                     } else {
                         // Silent refresh - update UI if products changed
                         const currentSearch = document.getElementById('productSearch').value;
-                        this.displayProductsList();
                         this.handleSearch(currentSearch);
                     }
                     
@@ -260,7 +252,6 @@ class POSSystem {
                     // If we have cached data, use it instead of showing error
                     if (this.cacheExists() && this.products.length > 0) {
                         if (!silent) {
-                            this.displayProductsList();
                             this.handleSearch('');
                         }
                         return;
@@ -276,14 +267,13 @@ class POSSystem {
             console.error('Error loading products:', error);
             loadingOverlay.style.display = 'none';
             
-            // If we have cached data, use it instead of showing error
-            if (this.cacheExists() && this.products.length > 0) {
-                if (!silent) {
-                    this.displayProductsList();
-                    this.handleSearch('');
+                // If we have cached data, use it instead of showing error
+                if (this.cacheExists() && this.products.length > 0) {
+                    if (!silent) {
+                        this.handleSearch('');
+                    }
+                    return;
                 }
-                return;
-            }
             
             // Only show alert if not silent (first load)
             if (!silent) {
@@ -300,10 +290,9 @@ class POSSystem {
         const searchResultsDiv = document.getElementById('searchResults');
         
         if (!query.trim()) {
-            // Show all products when search is empty
-            this.searchResults = this.products.slice(0, 50); // Show first 50 products
-            this.displaySearchResults(searchResultsDiv, '', false);
-            this.displayProductsList(); // Update products list
+            // Hide search results when search is empty
+            searchResultsDiv.style.display = 'none';
+            searchResultsDiv.innerHTML = '';
             return;
         }
 
@@ -314,43 +303,12 @@ class POSSystem {
 
         if (this.searchResults.length === 0) {
             searchResultsDiv.style.display = 'none';
-            this.displayProductsList([]); // Show "No products found" in products list only
             return;
         }
 
         this.displaySearchResults(searchResultsDiv, query, true);
-        this.displayProductsList(this.searchResults, query); // Update products list with filtered results
     }
     
-    displayProductsList(productsToShow = null, searchQuery = '') {
-        const productsListDiv = document.getElementById('productsList');
-        const productsToDisplay = productsToShow || this.products;
-        const maxProducts = 50;
-        const displayProducts = productsToDisplay.slice(0, maxProducts);
-        const hasMore = productsToDisplay.length > maxProducts;
-
-        if (displayProducts.length === 0) {
-            productsListDiv.innerHTML = '<div class="no-results" style="padding: 20px; text-align: center; color: #666666;">No products found</div>';
-            return;
-        }
-
-        productsListDiv.innerHTML = displayProducts.map((product, index) => `
-            <div class="product-item" data-index="${index}">
-                <span class="product-item-name">${searchQuery ? this.highlightMatch(product.name, searchQuery) : product.name}</span>
-                <span class="product-item-rate">₹${product.rate.toFixed(2)}</span>
-            </div>
-        `).join('') + (hasMore ? `<div class="more-results" style="padding: 12px; text-align: center; color: #666666; font-size: 14px; font-style: italic;">+ ${productsToDisplay.length - maxProducts} more products</div>` : '');
-
-        // Add click handlers
-        productsListDiv.querySelectorAll('.product-item').forEach(item => {
-            item.addEventListener('click', () => {
-                const index = parseInt(item.dataset.index);
-                this.addToCart(displayProducts[index]);
-            });
-        });
-    }
-
-
     displaySearchResults(searchResultsDiv, query, highlight) {
         const maxResults = 50; // Limit display to 50 results
         const displayResults = this.searchResults.slice(0, maxResults);
@@ -385,15 +343,9 @@ class POSSystem {
         const searchInput = document.getElementById('productSearch');
         const searchResultsDiv = document.getElementById('searchResults');
         
-        // If search input is empty, show all products again
-        if (!searchInput.value.trim()) {
-            searchResultsDiv.style.display = 'none';
-            this.displayProductsList(); // Show all products in the list
-        } else {
-            // Otherwise, just hide the dropdown results
-            searchResultsDiv.style.display = 'none';
-            searchResultsDiv.innerHTML = '';
-        }
+        // Hide the dropdown results
+        searchResultsDiv.style.display = 'none';
+        searchResultsDiv.innerHTML = '';
     }
 
     addToCart(product) {
@@ -479,57 +431,62 @@ class POSSystem {
         const receiptContent = document.getElementById('receiptContent');
         const modal = document.getElementById('receiptModal');
         
-        const date = new Date().toLocaleString('en-IN', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('en-IN', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric'
+        });
+        const timeStr = now.toLocaleTimeString('en-IN', {
             hour: '2-digit',
-            minute: '2-digit'
+            minute: '2-digit',
+            hour12: true
         });
 
         const grandTotal = this.cart.reduce((sum, item) => sum + (item.rate * item.quantity), 0);
 
-        receiptContent.innerHTML = `
-            <div class="receipt">
-                <div class="receipt-header">
-                    <h3>Shreeji's Store</h3>
-                    <p class="receipt-date">${date}</p>
-                </div>
-                <div class="receipt-items">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Product</th>
-                                <th>Qty</th>
-                                <th>Rate</th>
-                                <th>Total</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${this.cart.map(item => `
-                                <tr>
-                                    <td>${item.name}</td>
-                                    <td>${item.quantity}</td>
-                                    <td>₹${item.rate.toFixed(2)}</td>
-                                    <td>₹${(item.rate * item.quantity).toFixed(2)}</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                </div>
-                <div class="receipt-total">
-                    <div class="receipt-total-row">
-                        <span>Grand Total:</span>
-                        <span>₹${grandTotal.toFixed(2)}</span>
-                    </div>
-                </div>
-                <div class="receipt-footer">
-                    <p>Thank you for your purchase!</p>
-                </div>
-            </div>
+        // Format items for receipt - ensure everything fits on one line (50 chars wide for better visibility)
+        const itemsText = this.cart.map(item => {
+            const name = item.name.length > 22 ? item.name.substring(0, 19) + '...' : item.name;
+            const qty = item.quantity.toString();
+            const rate = item.rate.toFixed(2);
+            const total = (item.rate * item.quantity).toFixed(2);
+            
+            // Format: Name (left, max 22 chars), then Qty x Rate = Total (right aligned)
+            // Total width: 22 (name) + 1 (space) + 2 (qty) + 1 (space) + 1 (x) + 1 (space) + 8 (rate) + 1 (space) + 1 (=) + 1 (space) + 10 (total) = 49 chars
+            const namePart = name.padEnd(22);
+            const qtyPart = qty.padStart(2);
+            const ratePart = rate.padStart(8);
+            const totalPart = total.padStart(10);
+            
+            return `${namePart} ${qtyPart} x ${ratePart} = ${totalPart}`;
+        }).join('\n');
+
+        // Store name left-aligned (same position as date/time)
+        const storeName = "SHREEJI'S STORE";
+
+        // Format total with proper alignment (match item line width)
+        const totalLabel = "Total".padEnd(22);
+        const totalValue = `₹${grandTotal.toFixed(2)}`.padStart(26);
+
+        receiptContent.textContent = `
+${storeName}
+
+Date: ${dateStr}
+Time: ${timeStr}
+
+${'·'.repeat(50)}
+Item                  Qty    Rate      Total
+${'·'.repeat(50)}
+${itemsText}
+${'·'.repeat(50)}
+${totalLabel}${totalValue}
+${'·'.repeat(50)}
+
+Thank you for your purchase!
         `;
 
-        modal.style.display = 'block';
+        modal.style.display = 'flex';
     }
 
     closeReceipt() {

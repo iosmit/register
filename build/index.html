@@ -97,13 +97,14 @@
             left: 0;
             right: 0;
             background: #ffffff;
-            border: 2px solid #000000;
+            border: none;
             border-radius: 24px;
             margin-top: 8px;
             max-height: 500px;
             overflow-y: auto;
             z-index: 1000;
             display: none;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
         
         .search-result-item {
@@ -170,78 +171,6 @@
             flex-direction: column;
         }
         
-        
-        /* Products Section */
-        .products-section {
-            margin-bottom: 32px;
-        }
-        
-        .products-list {
-            max-height: 400px;
-            overflow-y: auto;
-            border: 1px solid #e0e0e0;
-            border-radius: 12px;
-            padding: 8px;
-        }
-        
-        .products-list::-webkit-scrollbar {
-            width: 8px;
-        }
-        
-        .products-list::-webkit-scrollbar-track {
-            background: #f1f1f1;
-            border-radius: 4px;
-        }
-        
-        .products-list::-webkit-scrollbar-thumb {
-            background: #888;
-            border-radius: 4px;
-        }
-        
-        .products-list::-webkit-scrollbar-thumb:hover {
-            background: #555;
-        }
-        
-        .product-item {
-            padding: 12px 16px;
-            cursor: pointer;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid #f0f0f0;
-            transition: background-color 0.2s;
-            border-radius: 8px;
-            margin-bottom: 4px;
-        }
-        
-        .product-item:hover {
-            background-color: #f9f9f9;
-        }
-        
-        .product-item:last-child {
-            border-bottom: none;
-            margin-bottom: 0;
-        }
-        
-        .product-item-name {
-            flex: 1;
-            font-weight: 500;
-            color: #000000;
-            font-size: 16px;
-        }
-        
-        .product-item-name mark {
-            background-color: #ffeb3b;
-            padding: 2px 4px;
-            border-radius: 3px;
-        }
-        
-        .product-item-rate {
-            color: #000000;
-            font-weight: 600;
-            margin-left: 10px;
-            font-size: 16px;
-        }
         
         .cart-section h2 {
             margin-bottom: 24px;
@@ -473,26 +402,27 @@
             background-color: #ffffff;
             margin: 5% auto;
             padding: 0;
-            border-radius: 24px;
+            border-radius: 6px;
             width: 90%;
-            max-width: 600px;
+            max-width: 480px;
             max-height: 90vh;
             overflow-y: auto;
-            border: 2px solid #000000;
+            border: 1px solid #d0d0d0;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.1);
         }
         
         .modal-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 24px 32px;
-            border-bottom: 2px solid #000000;
+            padding: 20px 24px;
+            border-bottom: 1px solid #e0e0e0;
         }
         
         .modal-header h2 {
             margin: 0;
             color: #000000;
-            font-size: 24px;
+            font-size: 20px;
             font-weight: 600;
         }
         
@@ -511,93 +441,29 @@
         }
         
         .receipt-content {
-            padding: 32px;
-        }
-        
-        .receipt {
-            text-align: center;
-        }
-        
-        .receipt-header {
-            margin-bottom: 24px;
-        }
-        
-        .receipt-header h3 {
-            font-size: 24px;
+            padding: 32px 28px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 13px;
+            line-height: 1.9;
             color: #000000;
-            margin-bottom: 8px;
-            font-weight: 600;
-        }
-        
-        .receipt-date {
-            color: #666666;
-            font-size: 14px;
-        }
-        
-        .receipt-items {
-            margin: 24px 0;
-        }
-        
-        .receipt-items table {
+            background: #ffffff;
+            white-space: pre;
+            text-align: left;
             width: 100%;
-            border-collapse: collapse;
-        }
-        
-        .receipt-items th {
-            background: #000000;
-            color: #ffffff;
-            padding: 12px;
-            text-align: left;
-            font-weight: 600;
-            font-size: 14px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        .receipt-items td {
-            padding: 16px 12px;
-            border-bottom: 1px solid #e0e0e0;
-            text-align: left;
-            font-size: 16px;
-        }
-        
-        .receipt-items td:nth-child(2),
-        .receipt-items td:nth-child(3),
-        .receipt-items td:nth-child(4) {
-            text-align: right;
-        }
-        
-        .receipt-items tr:hover {
-            background-color: #f9f9f9;
-        }
-        
-        .receipt-total {
-            margin: 24px 0;
-            padding-top: 24px;
-            border-top: 2px solid #000000;
-        }
-        
-        .receipt-total-row {
-            display: flex;
-            justify-content: space-between;
-            font-size: 20px;
-            font-weight: 700;
-            color: #000000;
-        }
-        
-        .receipt-footer {
-            margin-top: 24px;
-            padding-top: 24px;
-            border-top: 1px solid #e0e0e0;
-            color: #666666;
-            font-style: italic;
+            margin: 0 auto;
+            overflow-x: visible;
+            letter-spacing: 0.1px;
         }
         
         .modal-actions {
             display: flex;
-            gap: 12px;
+            justify-content: center;
             padding: 24px 32px;
             border-top: 1px solid #e0e0e0;
+        }
+        
+        .modal-actions .btn {
+            max-width: 200px;
         }
         
         /* Loading Overlay */
@@ -650,13 +516,16 @@
                 display: block;
                 position: static;
                 background: white;
+                padding: 0;
             }
             
             .modal-content {
                 margin: 0;
                 box-shadow: none;
-                max-width: 100%;
+                max-width: 80mm;
+                width: 80mm;
                 border: none;
+                padding: 10mm;
             }
             
             .modal-header,
@@ -664,8 +533,11 @@
                 display: none;
             }
             
-            .receipt {
-                page-break-inside: avoid;
+            .receipt-content {
+                font-size: 10pt;
+                padding: 0;
+                max-width: 100%;
+                line-height: 1.5;
             }
         }
     </style>
@@ -705,12 +577,6 @@
                 <div id="searchResults" class="search-results"></div>
             </div>
 
-            <!-- Products List -->
-            <div class="products-section">
-                <div id="productsList" class="products-list">
-                    <!-- Products will be displayed here -->
-                </div>
-            </div>
         </section>
     </div>
 
@@ -724,7 +590,6 @@
             <div class="receipt-content" id="receiptContent"></div>
             <div class="modal-actions">
                 <button id="printReceipt" class="btn btn-primary">Print</button>
-                <button id="newTransaction" class="btn btn-secondary">New Transaction</button>
             </div>
         </div>
     </div>
