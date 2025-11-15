@@ -11,9 +11,6 @@ class POSSystem {
     async init() {
         this.setupEventListeners();
         await this.loadProducts();
-        // Show all products initially
-        this.displayProductsList();
-        this.handleSearch('');
     }
 
     setupEventListeners() {
@@ -55,34 +52,59 @@ class POSSystem {
         loadingOverlay.style.display = 'flex';
 
         try {
-            if (!STORE_PRODUCTS_URL || STORE_PRODUCTS_URL === 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR7f9Ungw0dtrY5x0RUeCpxdqe5dRiOYWBoQMMUYESZil607WXSTVYKyBxchrK_vY-NUMdsb5H4Iwgv/pub?gid=1244670162&single=true&output=csv' || STORE_PRODUCTS_URL.trim() === '') {
+            if (!STORE_PRODUCTS_URL || STORE_PRODUCTS_URL === '{{STORE_PRODUCTS}}' || STORE_PRODUCTS_URL.trim() === '') {
                 throw new Error('STORE_PRODUCTS URL not configured. Please run generate-config.js or set environment variable.');
             }
 
             console.log('Fetching products from:', STORE_PRODUCTS_URL);
-            const response = await fetch(STORE_PRODUCTS_URL);
             
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            const csvText = await response.text();
-            console.log('CSV received, length:', csvText.length);
-            console.log('First 200 chars:', csvText.substring(0, 200));
-            
-            this.products = this.parseCSV(csvText);
-            
-            if (this.products.length === 0) {
-                throw new Error('No products found in CSV. Please check the CSV format.');
-            }
-            
-            console.log(`✓ Loaded ${this.products.length} products`);
+            // Use PapaParse to fetch and parse CSV (handles redirects automatically)
+            Papa.parse(STORE_PRODUCTS_URL, {
+                download: true,
+                header: true,
+                skipEmptyLines: true,
+                complete: (results) => {
+                    console.log('CSV parsed successfully:', results.data.length, 'rows');
+                    
+                    // Parse the CSV data into products
+                    this.products = results.data
+                        .filter(row => {
+                            // Check if row has PRODUCT and RATE columns
+                            const product = row.PRODUCT || row.product || '';
+                            const rate = row.RATE || row.rate || '';
+                            return product && product.trim() !== '' && rate && !isNaN(parseFloat(rate)) && parseFloat(rate) > 0;
+                        })
+                        .map(row => {
+                            const product = (row.PRODUCT || row.product || '').trim();
+                            const rate = parseFloat(row.RATE || row.rate || 0);
+                            return {
+                                name: product,
+                                rate: rate
+                            };
+                        });
+                    
+                    if (this.products.length === 0) {
+                        throw new Error('No products found in CSV. Please check the CSV format. Expected columns: PRODUCT, RATE');
+                    }
+                    
+                    console.log(`✓ Loaded ${this.products.length} products`);
+                    loadingOverlay.style.display = 'none';
+                    
+                    // Show products and initialize search
+                    this.displayProductsList();
+                    this.handleSearch('');
+                },
+                error: (error) => {
+                    console.error('Error loading products:', error);
+                    loadingOverlay.style.display = 'none';
+                    alert(`Failed to load products:\n\n${error.message || 'Unknown error occurred'}\n\nPlease check:\n1. The STORE_PRODUCTS URL in your .env file\n2. Browser console for more details\n3. That the Google Sheet is published as CSV`);
+                }
+            });
         } catch (error) {
             console.error('Error loading products:', error);
             const errorMessage = error.message || 'Unknown error occurred';
-            alert(`Failed to load products:\n\n${errorMessage}\n\nPlease check:\n1. The STORE_PRODUCTS URL in your .env file\n2. Browser console for more details\n3. Network tab to see if the request succeeded`);
-        } finally {
             loadingOverlay.style.display = 'none';
+            alert(`Failed to load products:\n\n${errorMessage}\n\nPlease check:\n1. The STORE_PRODUCTS URL in your .env file\n2. Browser console for more details\n3. Network tab to see if the request succeeded`);
         }
     }
 
@@ -115,11 +137,14 @@ class POSSystem {
                 }
                 
                 // Skip rows with empty product or invalid rate
-                if (product && !isNaN(rate) && rate > 0) {
+                if (product && product.length > 0 && !isNaN(rate) && rate > 0) {
                     products.push({
                         name: product,
                         rate: rate
                     });
+                } else {
+                    // Debug: log skipped rows
+                    console.debug('Skipped row:', { product, rate, columns: columns.length });
                 }
             }
         }
