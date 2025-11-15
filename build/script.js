@@ -208,10 +208,6 @@ class POSSystem {
         }
 
         try {
-            if (!STORE_PRODUCTS_URL || STORE_PRODUCTS_URL === '{{STORE_PRODUCTS}}' || STORE_PRODUCTS_URL.trim() === '') {
-                throw new Error('STORE_PRODUCTS URL not configured. Please run generate-config.js or set environment variable.');
-            }
-
             console.log('Fetching products from:', STORE_PRODUCTS_URL);
             
             // Use PapaParse to fetch and parse CSV (handles redirects automatically)
