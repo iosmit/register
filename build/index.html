@@ -82,6 +82,10 @@
                 font-size: 16px;
             }
             
+            .cart-item-rate-input {
+                font-size: 16px;
+            }
+            
             .modal-content {
                 width: 95%;
                 margin: 2% auto;
@@ -319,6 +323,30 @@
         .cart-item-rate {
             font-size: 14px;
             color: #666666;
+            cursor: pointer;
+            user-select: none;
+            transition: color 0.2s;
+        }
+        
+        .cart-item-rate:hover {
+            color: #000000;
+            text-decoration: underline;
+        }
+        
+        .cart-item-rate-input {
+            font-size: 14px;
+            font-family: inherit;
+            border: 2px solid #000000;
+            border-radius: 4px;
+            padding: 4px 8px;
+            width: 100px;
+            background-color: #ffffff;
+            color: #000000;
+        }
+        
+        .cart-item-rate-input:focus {
+            outline: none;
+            border-color: #000000;
         }
         
         .cart-item-right {

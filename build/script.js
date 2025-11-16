@@ -539,6 +539,71 @@ class POSSystem {
             this.updateCartDisplay();
         }
     }
+    
+    updateRate(index, newRate) {
+        const item = this.cart[index];
+        const rate = parseFloat(newRate);
+        
+        if (!isNaN(rate) && rate > 0) {
+            item.rate = rate;
+            this.updateCartDisplay();
+        } else {
+            // Invalid rate, restore original
+            this.updateCartDisplay();
+        }
+    }
+    
+    editRate(index) {
+        const cartItem = document.querySelector(`.cart-item[data-index="${index}"]`);
+        if (!cartItem) return;
+        
+        const rateSpan = cartItem.querySelector('.cart-item-rate');
+        if (!rateSpan || rateSpan.tagName === 'INPUT') return; // Already editing or not found
+        
+        const currentRate = this.cart[index].rate;
+        
+        // Create input field
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.className = 'cart-item-rate-input';
+        input.value = currentRate.toFixed(2);
+        input.min = '0';
+        input.step = '0.01';
+        input.style.width = '100px';
+        input.style.padding = '4px 8px';
+        input.style.border = '2px solid #000000';
+        input.style.borderRadius = '4px';
+        input.style.fontSize = '14px';
+        input.style.fontFamily = 'inherit';
+        input.style.backgroundColor = '#ffffff';
+        input.style.color = '#000000';
+        
+        // Replace span with input
+        rateSpan.replaceWith(input);
+        input.focus();
+        input.select();
+        
+        // Save on Enter or blur
+        const saveRate = () => {
+            const newRate = parseFloat(input.value);
+            if (!isNaN(newRate) && newRate > 0) {
+                this.updateRate(index, newRate);
+            } else {
+                // Invalid rate, restore original display
+                this.updateCartDisplay();
+            }
+        };
+        
+        input.addEventListener('blur', saveRate);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                input.blur(); // Trigger blur which will save
+            } else if (e.key === 'Escape') {
+                this.updateCartDisplay();
+            }
+        });
+    }
 
     updateCartDisplay() {
         const cartItemsDiv = document.getElementById('cartItems');
@@ -551,11 +616,11 @@ class POSSystem {
             clearCartBtn.disabled = true;
         } else {
             cartItemsDiv.innerHTML = this.cart.map((item, index) => `
-                <div class="cart-item">
+                <div class="cart-item" data-index="${index}">
                     <div class="cart-item-row">
                         <div class="cart-item-info">
                             <span class="cart-item-name">${item.name}</span>
-                            <span class="cart-item-rate">₹${item.rate.toFixed(2)} each</span>
+                            <span class="cart-item-rate" onclick="pos.editRate(${index})" title="Click to edit rate">₹${item.rate.toFixed(2)} each</span>
                         </div>
                         <div class="cart-item-right">
                             <button class="remove-btn remove-btn-desktop" onclick="pos.removeFromCart(${index})" title="Remove">×</button>
