@@ -445,19 +445,27 @@ class POSSystem {
 
         const grandTotal = this.cart.reduce((sum, item) => sum + (item.rate * item.quantity), 0);
 
-        // Format items for receipt - ensure everything fits on one line (50 chars wide for better visibility)
+        // Detect mobile screen
+        const isMobile = window.innerWidth <= 768;
+        
+        // Adjust column widths based on screen size
+        const nameWidth = isMobile ? 15 : 22;
+        const rateWidth = isMobile ? 7 : 8;
+        const totalWidth = isMobile ? 8 : 10;
+        const separatorWidth = isMobile ? 35 : 50;
+
+        // Format items for receipt - ensure everything fits on one line
         const itemsText = this.cart.map(item => {
-            const name = item.name.length > 22 ? item.name.substring(0, 19) + '...' : item.name;
+            const name = item.name.length > nameWidth ? item.name.substring(0, nameWidth - 3) + '...' : item.name;
             const qty = item.quantity.toString();
             const rate = item.rate.toFixed(2);
             const total = (item.rate * item.quantity).toFixed(2);
             
-            // Format: Name (left, max 22 chars), then Qty x Rate = Total (right aligned)
-            // Total width: 22 (name) + 1 (space) + 2 (qty) + 1 (space) + 1 (x) + 1 (space) + 8 (rate) + 1 (space) + 1 (=) + 1 (space) + 10 (total) = 49 chars
-            const namePart = name.padEnd(22);
+            // Format: Name (left), then Qty x Rate = Total (right aligned)
+            const namePart = name.padEnd(nameWidth);
             const qtyPart = qty.padStart(2);
-            const ratePart = rate.padStart(8);
-            const totalPart = total.padStart(10);
+            const ratePart = rate.padStart(rateWidth);
+            const totalPart = total.padStart(totalWidth);
             
             return `${namePart} ${qtyPart} x ${ratePart} = ${totalPart}`;
         }).join('\n');
@@ -466,8 +474,12 @@ class POSSystem {
         const storeName = "SHREEJI'S STORE";
 
         // Format total with proper alignment (match item line width)
-        const totalLabel = "Total".padEnd(22);
-        const totalValue = `₹${grandTotal.toFixed(2)}`.padStart(26);
+        // Total line format: "Total" (left) + spaces + "₹XX.XX" (right aligned)
+        const totalLabel = "Total".padEnd(nameWidth);
+        const totalValueStr = `₹${grandTotal.toFixed(2)}`;
+        // Calculate remaining space: nameWidth + 1 (space) + 2 (qty) + 1 (space) + 1 (x) + 1 (space) + rateWidth + 1 (space) + 1 (=) + 1 (space) + totalWidth
+        const totalLineWidth = nameWidth + 1 + 2 + 1 + 1 + 1 + rateWidth + 1 + 1 + 1 + totalWidth;
+        const totalValue = totalValueStr.padStart(totalLineWidth - nameWidth);
 
         receiptContent.textContent = `
 ${storeName}
@@ -475,13 +487,13 @@ ${storeName}
 Date: ${dateStr}
 Time: ${timeStr}
 
-${'·'.repeat(50)}
-Item                  Qty    Rate      Total
-${'·'.repeat(50)}
+${'·'.repeat(separatorWidth)}
+${isMobile ? 'Item           Qty  Rate    Total' : 'Item                  Qty    Rate      Total'}
+${'·'.repeat(separatorWidth)}
 ${itemsText}
-${'·'.repeat(50)}
+${'·'.repeat(separatorWidth)}
 ${totalLabel}${totalValue}
-${'·'.repeat(50)}
+${'·'.repeat(separatorWidth)}
 
 Thank you for your purchase!
         `;
