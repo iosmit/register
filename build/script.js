@@ -54,20 +54,17 @@ class POSSystem {
             }
         }
         
-        // Load customers (from cache if available, otherwise fetch)
+        // Load customers only if cache is not available
+        // If cache exists, customers are already loaded in loadCustomersFromCache()
         if (!hasCustomersCache) {
             await this.loadCustomers(true); // Load and cache customers
         }
         
-        // Fetch fresh data in background to update cache
-        this.loadProductsWithRetry(true).catch(error => {
-            console.warn('Background products cache refresh failed:', error);
-        });
-        this.loadCustomers(true).catch(error => {
-            console.warn('Background customers cache refresh failed:', error);
-        });
-        
         // Set up periodic cache refresh (every 5 minutes) - flush and replace
+        // Cache is only updated when:
+        // 1. Changes are made (receipts created, payments saved)
+        // 2. Fresh data is fetched (when cache is missing or stale)
+        // 3. Every 5 minutes (automatic flush and replace)
         this.setupPeriodicRefresh();
     }
     
@@ -119,7 +116,7 @@ class POSSystem {
     // Check if cache is stale (older than 5 minutes)
     isCacheStale() {
         try {
-            const cacheTimestamp = localStorage.getItem(CACHE_TIMESTAMP_KEY);
+            const cacheTimestamp = localStorage.getItem(PRODUCTS_CACHE_TIMESTAMP_KEY);
             
             // If no cache timestamp, it's stale
             if (!cacheTimestamp) {
@@ -139,30 +136,13 @@ class POSSystem {
     }
     
     // Schedule cache refresh when current cache becomes stale
+    // NOTE: This is no longer used - cache is only refreshed:
+    // 1. When changes are made (receipts created, payments saved)
+    // 2. When fetching fresh data (cache missing or stale)
+    // 3. Every 5 minutes (automatic flush and replace via setupPeriodicRefresh)
     scheduleCacheRefresh() {
-        try {
-            const cacheTimestamp = localStorage.getItem(CACHE_TIMESTAMP_KEY);
-            if (!cacheTimestamp) return;
-            
-            const cacheTime = parseInt(cacheTimestamp, 10);
-            const now = Date.now();
-            const timeSinceCache = now - cacheTime;
-            const timeUntilStale = CACHE_DURATION_MS - timeSinceCache;
-            
-            if (timeUntilStale > 0) {
-                // Clear any existing timeout
-                if (this.cacheRefreshTimeout) {
-                    clearTimeout(this.cacheRefreshTimeout);
-                }
-                
-                // Schedule refresh for when cache becomes stale
-                this.cacheRefreshTimeout = setTimeout(() => {
-                    this.loadProductsWithRetry(true); // silent refresh with retry
-                }, timeUntilStale);
-            }
-        } catch (error) {
-            console.error('Error scheduling cache refresh:', error);
-        }
+        // Deprecated - cache refresh is handled by setupPeriodicRefresh
+        // Keeping this function for backwards compatibility but it does nothing
     }
     
     // Set up periodic refresh every 5 minutes
@@ -223,10 +203,11 @@ class POSSystem {
             if (!silent) {
                 const cached = this.loadCustomersFromCache();
                 if (cached && this.customers.length > 0) {
-                    return; // Use cached data
+                    return; // Use cached data, don't fetch
                 }
             }
             
+            // Only fetch if cache is not available or silent mode (background refresh)
             const response = await fetch('/api/customers?t=' + Date.now());
             if (!response.ok) {
                 console.warn('Failed to load customers for autocomplete');
@@ -259,9 +240,13 @@ class POSSystem {
                     });
 
                     this.customers = Array.from(customerSet);
-                    console.log(`Loaded ${this.customers.length} customers for autocomplete`);
                     
-                    // Save to cache
+                    // Only log and save if this is a fresh fetch (not just updating cache)
+                    if (!silent) {
+                        console.log(`Loaded ${this.customers.length} customers for autocomplete`);
+                    }
+                    
+                    // Save to cache (always update cache with fresh data)
                     this.saveCustomersToCache(csvText, this.customers);
                 },
                 error: (error) => {
@@ -564,7 +549,7 @@ class POSSystem {
             }
             
             localStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(products));
-            localStorage.setItem(CACHE_TIMESTAMP_KEY, Date.now().toString());
+            localStorage.setItem(PRODUCTS_CACHE_TIMESTAMP_KEY, Date.now().toString());
             this.updateLastViewTime();
             console.log(`Saved ${products.length} products to cache`);
             return true;

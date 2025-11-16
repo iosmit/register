@@ -26,19 +26,19 @@ class CustomersManager {
         const hasCache = this.loadCustomersFromCache();
         
         if (!hasCache) {
-            await this.loadCustomers(true); // Load and cache
+            // No cache available - fetch and cache
+            await this.loadCustomers(true); // Load and cache customers
         } else {
             // Cache exists - refresh customer list from cache to ensure it's up to date
             // This ensures new customers added on index page are visible
             this.refreshCustomerListFromCache();
         }
         
-        // Fetch fresh data in background (but don't overwrite if cache was just updated)
-        this.loadCustomers(true).catch(error => {
-            console.warn('Background customers cache refresh failed:', error);
-        });
-        
-        // Set up periodic cache refresh (every 5 minutes)
+        // Set up periodic cache refresh (every 5 minutes) - flush and replace
+        // Cache is only updated when:
+        // 1. Changes are made (payments saved)
+        // 2. Fresh data is fetched (when cache is missing or stale)
+        // 3. Every 5 minutes (automatic flush and replace)
         this.setupPeriodicRefresh();
     }
     
@@ -128,10 +128,30 @@ class CustomersManager {
             const cachedCsv = localStorage.getItem(CUSTOMERS_CACHE_KEY);
             
             if (cachedCustomers && cachedCsv) {
-                this.customers = JSON.parse(cachedCustomers);
+                const parsed = JSON.parse(cachedCustomers);
+                
+                // Ensure customers have the correct structure { name: string }
+                this.customers = parsed
+                    .filter(customer => customer && (customer.name || typeof customer === 'string'))
+                    .map(customer => {
+                        // Handle both { name: "..." } and string formats
+                        if (typeof customer === 'string') {
+                            return { name: customer };
+                        }
+                        if (customer.name) {
+                            return { name: String(customer.name).trim() };
+                        }
+                        return null;
+                    })
+                    .filter(customer => customer && customer.name); // Remove nulls and empty names
+                
                 this.filteredCustomers = [...this.customers];
                 console.log(`Loaded ${this.customers.length} customers from cache`);
-                this.displayCustomers();
+                
+                // Only display if we have valid customers
+                if (this.customers.length > 0) {
+                    this.displayCustomers();
+                }
                 return true;
             }
             return false;
@@ -142,12 +162,14 @@ class CustomersManager {
     }
     
     // Save customers to cache
-    saveCustomersToCache(csvText, customers) {
+    saveCustomersToCache(csvText, customers, silent = false) {
         try {
             localStorage.setItem(CUSTOMERS_CACHE_KEY, csvText);
             localStorage.setItem(CUSTOMERS_CACHE_KEY_PARSED, JSON.stringify(customers));
             localStorage.setItem(CUSTOMERS_CACHE_TIMESTAMP_KEY, Date.now().toString());
-            console.log(`Saved ${customers.length} customers to cache`);
+            if (!silent) {
+                console.log(`Saved ${customers.length} customers to cache`);
+            }
             return true;
         } catch (error) {
             console.error('Error saving customers to cache:', error);
@@ -364,8 +386,9 @@ class CustomersManager {
                     // Initialize filtered customers with all customers
                     this.filteredCustomers = [...this.customers];
                     
-                    // Save to cache
-                    this.saveCustomersToCache(csvText, this.customers);
+                    // Save to cache (always update cache with fresh data)
+                    // Use silent mode for background refreshes to reduce console noise
+                    this.saveCustomersToCache(csvText, this.customers, silent);
 
                     if (this.customers.length === 0) {
                         console.warn('No customers found in CSV');
@@ -374,6 +397,9 @@ class CustomersManager {
                     this.displayCustomers();
                     if (!silent) {
                         this.hideLoading();
+                    } else {
+                        // Silent mode - don't log cache saves for background refreshes
+                        // Cache is still updated, just without console noise
                     }
                 },
                 error: (error) => {
@@ -526,7 +552,7 @@ class CustomersManager {
     displayCustomers() {
         const customersList = document.getElementById('customersList');
         
-        if (this.customers.length === 0) {
+        if (!this.customers || this.customers.length === 0) {
             customersList.innerHTML = `
                 <div class="empty-state">
                     <h3>No customers found</h3>
@@ -536,7 +562,7 @@ class CustomersManager {
             return;
         }
         
-        if (this.filteredCustomers.length === 0) {
+        if (!this.filteredCustomers || this.filteredCustomers.length === 0) {
             customersList.innerHTML = `
                 <div class="empty-state">
                     <h3>No customers found</h3>
@@ -546,12 +572,20 @@ class CustomersManager {
             return;
         }
 
-        customersList.innerHTML = this.filteredCustomers.map(customer => `
-            <div class="customer-card" onclick="customersManager.selectCustomer('${customer.name.replace(/'/g, "\\'")}')">
-                <div class="customer-name">${this.escapeHtml(customer.name)}</div>
-                <div class="customer-receipt-count">Click to view receipts</div>
-            </div>
-        `).join('');
+        customersList.innerHTML = this.filteredCustomers
+            .filter(customer => customer && customer.name) // Filter out invalid customers
+            .map(customer => {
+                const customerName = String(customer.name || '').trim();
+                if (!customerName) return '';
+                return `
+                    <div class="customer-card" onclick="customersManager.selectCustomer('${customerName.replace(/'/g, "\\'")}')">
+                        <div class="customer-name">${this.escapeHtml(customerName)}</div>
+                        <div class="customer-receipt-count">Click to view receipts</div>
+                    </div>
+                `;
+            })
+            .filter(html => html !== '') // Remove empty strings
+            .join('');
     }
 
     async selectCustomer(customerName) {
