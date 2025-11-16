@@ -29,12 +29,16 @@ export async function onRequestGet(context) {
         const csvText = await response.text();
 
         // Return CSV with proper headers
+        // Use no-cache to prevent browser/CDN from serving stale data
+        // The client-side cache handles caching logic
         return new Response(csvText, {
             status: 200,
             headers: {
                 'Content-Type': 'text/csv',
                 'Access-Control-Allow-Origin': '*',
-                'Cache-Control': 'public, max-age=300' // Cache for 5 minutes
+                'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
+                'Pragma': 'no-cache',
+                'Expires': '0'
             }
         });
     } catch (error) {

@@ -24,24 +24,49 @@ class POSSystem {
         // Step 1: Always check cache first on page load
         const hasCache = this.loadProductsFromCache();
         
-        if (hasCache) {
-            // Cache exists - use it immediately
+        if (hasCache && this.products.length > 0) {
+            // Cache exists and has products - use it immediately
             this.handleSearch('');
             this.updateLastViewTime();
             
             // Check if cache is stale, if so fetch fresh data in background
             if (this.isCacheStale()) {
-                this.loadProducts(true); // silent = true (no loading overlay)
+                this.loadProductsWithRetry(true); // silent = true (no loading overlay)
             } else {
                 this.scheduleCacheRefresh();
             }
         } else {
-            // No cache exists - fetch data first, then save to cache
-            await this.loadProducts(false); // silent = false (show loading overlay)
+            // No cache exists or cache is empty - fetch data first, then save to cache
+            await this.loadProductsWithRetry(false); // silent = false (show loading overlay)
         }
         
         // Set up periodic cache refresh (every 5 minutes)
         this.setupPeriodicRefresh();
+    }
+    
+    // Load products with retry logic
+    async loadProductsWithRetry(silent = false, retryCount = 0, maxRetries = 3) {
+        try {
+            await this.loadProducts(silent);
+            
+            // Verify products were loaded successfully
+            if (this.products.length === 0 && retryCount < maxRetries) {
+                console.warn(`No products loaded, retrying... (${retryCount + 1}/${maxRetries})`);
+                // Wait 1 second before retry
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                return this.loadProductsWithRetry(silent, retryCount + 1, maxRetries);
+            }
+        } catch (error) {
+            // Retry on error
+            if (retryCount < maxRetries) {
+                console.warn(`Error loading products, retrying... (${retryCount + 1}/${maxRetries}):`, error);
+                // Wait 1 second before retry
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                return this.loadProductsWithRetry(silent, retryCount + 1, maxRetries);
+            } else {
+                throw error; // Re-throw if max retries reached
+            }
+        }
     }
     
     // Check if cache is stale (older than 5 minutes)
@@ -85,7 +110,7 @@ class POSSystem {
                 
                 // Schedule refresh for when cache becomes stale
                 this.cacheRefreshTimeout = setTimeout(() => {
-                    this.loadProducts(true); // silent refresh
+                    this.loadProductsWithRetry(true); // silent refresh with retry
                 }, timeUntilStale);
             }
         } catch (error) {
@@ -102,7 +127,7 @@ class POSSystem {
         
         // Refresh cache every 5 minutes
         this.cacheRefreshInterval = setInterval(() => {
-            this.loadProducts(true); // silent refresh
+            this.loadProductsWithRetry(true); // silent refresh with retry
         }, CACHE_DURATION_MS);
     }
     
@@ -193,9 +218,14 @@ class POSSystem {
             loadingOverlay.style.display = 'flex';
         }
 
-        try {
-            // Use PapaParse to fetch and parse CSV (handles redirects automatically)
-            Papa.parse(STORE_PRODUCTS_URL, {
+        return new Promise((resolve, reject) => {
+            try {
+                // Add cache-busting query parameter to prevent stale cache
+                const cacheBuster = `?t=${Date.now()}&v=${Math.random().toString(36).substring(7)}`;
+                const urlWithCacheBuster = STORE_PRODUCTS_URL + cacheBuster;
+                
+                // Use PapaParse to fetch and parse CSV (handles redirects automatically)
+                Papa.parse(urlWithCacheBuster, {
                 download: true,
                 header: true,
                 skipEmptyLines: true,
@@ -227,9 +257,16 @@ class POSSystem {
                         }));
                     
                     if (newProducts.length === 0) {
+                        // If no products found, check if we have cached products
+                        if (this.products.length > 0) {
+                            console.warn('No products found in fresh fetch, keeping cached products');
+                            loadingOverlay.style.display = 'none';
+                            return;
+                        }
                         throw new Error('No products found in CSV. Expected columns: PRODUCT, RATE');
                     }
                     
+                    // Only update if we got valid products
                     this.products = newProducts;
                     this.saveProductsToCache(this.products);
                     loadingOverlay.style.display = 'none';
@@ -244,6 +281,7 @@ class POSSystem {
                     }
                     
                     this.scheduleCacheRefresh();
+                    resolve(); // Resolve promise on success
                 },
                 error: (error) => {
                     console.error('Error loading products:', error);
@@ -254,6 +292,7 @@ class POSSystem {
                         if (!silent) {
                             this.handleSearch('');
                         }
+                        resolve(); // Resolve even with cached data
                         return;
                     }
                     
@@ -261,26 +300,32 @@ class POSSystem {
                     if (!silent) {
                         alert(`Failed to load products:\n\n${error.message || 'Unknown error occurred'}\n\nPlease check:\n1. The STORE_PRODUCTS URL in your .env file\n2. Browser console for more details\n3. That the Google Sheet is published as CSV`);
                     }
+                    
+                    reject(error); // Reject promise on error
                 }
             });
-        } catch (error) {
-            console.error('Error loading products:', error);
-            loadingOverlay.style.display = 'none';
-            
+            } catch (error) {
+                console.error('Error loading products:', error);
+                loadingOverlay.style.display = 'none';
+                
                 // If we have cached data, use it instead of showing error
                 if (this.cacheExists() && this.products.length > 0) {
                     if (!silent) {
                         this.handleSearch('');
                     }
+                    resolve(); // Resolve even with cached data
                     return;
                 }
-            
-            // Only show alert if not silent (first load)
-            if (!silent) {
-                const errorMessage = error.message || 'Unknown error occurred';
-                alert(`Failed to load products:\n\n${errorMessage}\n\nPlease check:\n1. The STORE_PRODUCTS URL in your .env file\n2. Browser console for more details\n3. Network tab to see if the request succeeded`);
+                
+                // Only show alert if not silent (first load)
+                if (!silent) {
+                    const errorMessage = error.message || 'Unknown error occurred';
+                    alert(`Failed to load products:\n\n${errorMessage}\n\nPlease check:\n1. The STORE_PRODUCTS URL in your .env file\n2. Browser console for more details\n3. Network tab to see if the request succeeded`);
+                }
+                
+                reject(error); // Reject promise on error
             }
-        }
+        });
     }
 
 
