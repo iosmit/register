@@ -411,6 +411,11 @@ class POSSystem {
             closeReceipt.addEventListener('click', () => this.closeReceipt());
             printReceipt.addEventListener('click', () => window.print());
             
+            const shareReceipt = document.getElementById('shareReceipt');
+            if (shareReceipt) {
+                shareReceipt.addEventListener('click', () => this.shareReceipt());
+            }
+            
             // Manual product entry
             const addManualProductBtn = document.getElementById('addManualProductBtn');
             const closeManualProductModal = document.getElementById('closeManualProductModal');
@@ -992,6 +997,117 @@ class POSSystem {
 
     closeReceipt() {
         document.getElementById('receiptModal').style.display = 'none';
+    }
+    
+    // Share receipt as JPEG image
+    async shareReceipt() {
+        const receiptContent = document.getElementById('receiptContent');
+        const modal = document.getElementById('receiptModal');
+        
+        if (!receiptContent || !modal) {
+            alert('Receipt not found');
+            return;
+        }
+        
+        // Ensure modal is visible for capture
+        if (modal.style.display === 'none') {
+            modal.style.display = 'flex';
+        }
+        
+        try {
+            // Show loading
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            if (loadingOverlay) {
+                loadingOverlay.style.display = 'flex';
+                loadingOverlay.querySelector('p').textContent = 'Generating receipt image...';
+            }
+            
+            // Wait a bit for any rendering to complete
+            await new Promise(resolve => setTimeout(resolve, 200));
+            
+            // Capture the receipt content as canvas
+            const canvas = await html2canvas(receiptContent, {
+                backgroundColor: '#ffffff',
+                scale: 2, // Higher quality
+                logging: false,
+                useCORS: true,
+                allowTaint: false,
+                windowWidth: receiptContent.scrollWidth,
+                windowHeight: receiptContent.scrollHeight
+            });
+            
+            // Convert canvas to blob
+            canvas.toBlob(async (blob) => {
+                if (!blob) {
+                    alert('Failed to generate receipt image');
+                    if (loadingOverlay) loadingOverlay.style.display = 'none';
+                    return;
+                }
+                
+                // Create file name with date and time
+                const now = new Date();
+                const dateStr = now.toLocaleDateString('en-IN', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric'
+                }).replace(/\//g, '-');
+                const timeStr = now.toLocaleTimeString('en-IN', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                }).replace(/:/g, '-');
+                const fileName = `Receipt-${dateStr}-${timeStr}.jpg`;
+                
+                // Create File object
+                const file = new File([blob], fileName, { type: 'image/jpeg' });
+                
+                // Check if Web Share API is available
+                if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+                    try {
+                        await navigator.share({
+                            title: 'Receipt',
+                            text: 'Receipt from Shreeji\'s Store',
+                            files: [file]
+                        });
+                    } catch (shareError) {
+                        // If share is cancelled or fails, fallback to download
+                        if (shareError.name !== 'AbortError') {
+                            this.downloadReceiptImage(blob, fileName);
+                        }
+                    }
+                } else {
+                    // Fallback to download if Web Share API is not available
+                    this.downloadReceiptImage(blob, fileName);
+                }
+                
+                // Hide loading
+                if (loadingOverlay) {
+                    loadingOverlay.style.display = 'none';
+                    loadingOverlay.querySelector('p').textContent = 'Loading products...';
+                }
+            }, 'image/jpeg', 0.95); // 95% quality
+            
+        } catch (error) {
+            console.error('Error sharing receipt:', error);
+            alert('Failed to share receipt. Please try again.');
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            if (loadingOverlay) {
+                loadingOverlay.style.display = 'none';
+                loadingOverlay.querySelector('p').textContent = 'Loading products...';
+            }
+        }
+    }
+    
+    // Download receipt as image (fallback)
+    downloadReceiptImage(blob, fileName) {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
     }
     
     // Show manual product entry modal
