@@ -431,8 +431,10 @@ class POSSystem {
         }
 
         // Filter customers that match the search term
+        // Handle both string and object formats
         const matches = this.customers.filter(customer => {
-            return customer.toLowerCase().includes(term);
+            const customerName = typeof customer === 'string' ? customer : (customer.name || '');
+            return String(customerName).toLowerCase().includes(term);
         }).slice(0, 10); // Limit to 10 results
 
         if (matches.length === 0) {
@@ -442,18 +444,23 @@ class POSSystem {
 
         // Highlight matching text
         const resultsHTML = matches.map(customer => {
-            const index = customer.toLowerCase().indexOf(term);
+            // Handle both string and object formats
+            const customerName = typeof customer === 'string' ? customer : (customer.name || '');
+            const customerNameStr = String(customerName);
+            const lowerName = customerNameStr.toLowerCase();
+            const index = lowerName.indexOf(term);
+            
             if (index === -1) {
-                return `<div class="customer-name-result-item" onclick="pos.selectCustomerName('${customer.replace(/'/g, "\\'")}')">
-                    <div class="customer-name-result-text">${this.escapeHtml(customer)}</div>
+                return `<div class="customer-name-result-item" onclick="pos.selectCustomerName('${customerNameStr.replace(/'/g, "\\'")}')">
+                    <div class="customer-name-result-text">${this.escapeHtml(customerNameStr)}</div>
                 </div>`;
             }
             
-            const before = customer.substring(0, index);
-            const match = customer.substring(index, index + term.length);
-            const after = customer.substring(index + term.length);
+            const before = customerNameStr.substring(0, index);
+            const match = customerNameStr.substring(index, index + term.length);
+            const after = customerNameStr.substring(index + term.length);
             
-            return `<div class="customer-name-result-item" onclick="pos.selectCustomerName('${customer.replace(/'/g, "\\'")}')">
+            return `<div class="customer-name-result-item" onclick="pos.selectCustomerName('${customerNameStr.replace(/'/g, "\\'")}')">
                 <div class="customer-name-result-text">${this.escapeHtml(before)}<mark>${this.escapeHtml(match)}</mark>${this.escapeHtml(after)}</div>
             </div>`;
         }).join('');
