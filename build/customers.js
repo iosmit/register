@@ -638,16 +638,31 @@ class CustomersManager {
             return;
         }
 
-        // Sort receipts by date (newest first) for display
-        // But preserve the original index for payment updates
+        // Sort receipts by creation order (latest first) - regardless of payment status
+        // All receipts (paid and unpaid) are shown in the same list, sorted by when they were created
         const sortedReceipts = [...this.receipts].sort((a, b) => {
+            // Primary sort: by date (newest first)
             const dateA = this.parseDate(a.date);
             const dateB = this.parseDate(b.date);
+            
             if (dateA !== dateB) {
-                return dateB - dateA;
+                return dateB - dateA; // Negative means b is newer, so b comes first
             }
-            // If same date, sort by time
-            return (b.time || '').localeCompare(a.time || '');
+            
+            // Secondary sort: by time (latest first) if same date
+            const timeA = this.parseTime(a.time || '');
+            const timeB = this.parseTime(b.time || '');
+            
+            if (timeA !== timeB) {
+                return timeB - timeA; // Negative means b is later, so b comes first
+            }
+            
+            // Tertiary sort: by original index (newest receipt added first)
+            // Since new receipts are added to column 2 (index 0), lower index = newer
+            // Use _originalIndex to maintain the order they were added
+            const indexA = a._originalIndex !== undefined ? a._originalIndex : 999;
+            const indexB = b._originalIndex !== undefined ? b._originalIndex : 999;
+            return indexA - indexB; // Lower index (newer column) comes first
         });
 
         receiptsList.innerHTML = sortedReceipts.map((receipt, index) => {
@@ -674,14 +689,22 @@ class CustomersManager {
     }
 
     selectReceipt(index) {
-        // Get the receipt from the sorted display array
+        // Get the receipt from the sorted display array (same sorting as displayReceipts)
+        // Sort by creation order (latest first), regardless of payment status
         const sortedReceipts = [...this.receipts].sort((a, b) => {
             const dateA = this.parseDate(a.date);
             const dateB = this.parseDate(b.date);
             if (dateA !== dateB) {
                 return dateB - dateA;
             }
-            return (b.time || '').localeCompare(a.time || '');
+            const timeA = this.parseTime(a.time || '');
+            const timeB = this.parseTime(b.time || '');
+            if (timeA !== timeB) {
+                return timeB - timeA;
+            }
+            const indexA = a._originalIndex !== undefined ? a._originalIndex : 999;
+            const indexB = b._originalIndex !== undefined ? b._originalIndex : 999;
+            return indexA - indexB; // Lower index (newer) comes first
         });
         
         this.currentReceipt = sortedReceipts[index];
@@ -857,9 +880,42 @@ class CustomersManager {
         // Try to parse DD/MM/YYYY format
         const parts = dateStr.split('/');
         if (parts.length === 3) {
-            return new Date(parts[2], parts[1] - 1, parts[0]).getTime();
+            const day = parseInt(parts[0], 10);
+            const month = parseInt(parts[1], 10) - 1; // Month is 0-indexed
+            const year = parseInt(parts[2], 10);
+            const date = new Date(year, month, day);
+            return date.getTime();
         }
-        return new Date(dateStr).getTime() || 0;
+        // Try to parse other formats
+        const parsed = new Date(dateStr);
+        return isNaN(parsed.getTime()) ? 0 : parsed.getTime();
+    }
+    
+    parseTime(timeStr) {
+        if (!timeStr) return 0;
+        // Try to parse HH:MM AM/PM format
+        const timeMatch = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+        if (timeMatch) {
+            let hours = parseInt(timeMatch[1], 10);
+            const minutes = parseInt(timeMatch[2], 10);
+            const period = timeMatch[3] ? timeMatch[3].toUpperCase() : '';
+            
+            if (period === 'PM' && hours !== 12) {
+                hours += 12;
+            } else if (period === 'AM' && hours === 12) {
+                hours = 0;
+            }
+            
+            return hours * 60 + minutes; // Return minutes since midnight for easy comparison
+        }
+        // Try to parse HH:MM format (24-hour)
+        const parts = timeStr.split(':');
+        if (parts.length >= 2) {
+            const hours = parseInt(parts[0], 10);
+            const minutes = parseInt(parts[1], 10);
+            return hours * 60 + minutes;
+        }
+        return 0;
     }
 
     formatCurrency(amount) {
