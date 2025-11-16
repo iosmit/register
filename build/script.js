@@ -21,7 +21,7 @@ class POSSystem {
     async init() {
         this.setupEventListeners();
         
-        // Step 1: Always check cache first on page load
+        // Step 1: Always check cache first on page load for immediate display
         const hasCache = this.loadProductsFromCache();
         
         if (hasCache && this.products.length > 0) {
@@ -29,19 +29,46 @@ class POSSystem {
             this.handleSearch('');
             this.updateLastViewTime();
             
-            // Check if cache is stale, if so fetch fresh data in background
-            if (this.isCacheStale()) {
-                this.loadProductsWithRetry(true); // silent = true (no loading overlay)
-            } else {
-                this.scheduleCacheRefresh();
-            }
+            // Always try to fetch fresh data on page load to ensure cache is up-to-date
+            // Do this in background (silent) so user can use cached data immediately
+            this.loadProductsWithRetry(true).catch(error => {
+                console.warn('Background cache refresh failed, using existing cache:', error);
+                // Cache is already loaded, so we're good
+            });
         } else {
             // No cache exists or cache is empty - fetch data first, then save to cache
+            // This is critical - we must populate cache on initial load
             await this.loadProductsWithRetry(false); // silent = false (show loading overlay)
+            
+            // Ensure cache was populated after initial load
+            if (this.products.length === 0) {
+                console.error('Failed to load products on initial page load, retrying...');
+                // Try one more time to ensure cache is filled
+                await this.loadProductsWithRetry(false);
+            }
+            
+            // Final verification that cache is populated
+            if (this.products.length > 0) {
+                const cachePopulated = this.verifyCacheSaved();
+                if (cachePopulated) {
+                    console.log(`✓ Cache successfully populated with ${this.products.length} products on page load`);
+                } else {
+                    console.warn('Cache verification failed after initial load, attempting to save again...');
+                    this.saveProductsToCache(this.products);
+                }
+            } else {
+                console.error('⚠️ Products array is still empty after initial load attempts');
+            }
         }
         
         // Set up periodic cache refresh (every 5 minutes)
         this.setupPeriodicRefresh();
+        
+        // Also ensure cache is refreshed periodically on page load
+        // If cache is fresh, schedule refresh for when it becomes stale
+        if (hasCache && this.products.length > 0 && !this.isCacheStale()) {
+            this.scheduleCacheRefresh();
+        }
     }
     
     // Load products with retry logic
@@ -50,21 +77,41 @@ class POSSystem {
             await this.loadProducts(silent);
             
             // Verify products were loaded successfully
-            if (this.products.length === 0 && retryCount < maxRetries) {
-                console.warn(`No products loaded, retrying... (${retryCount + 1}/${maxRetries})`);
-                // Wait 1 second before retry
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                return this.loadProductsWithRetry(silent, retryCount + 1, maxRetries);
+            if (this.products.length === 0) {
+                // Try to restore from cache first
+                if (this.ensureProductsFromCache()) {
+                    console.log('Products restored from cache after empty result');
+                    return; // Success with cached products
+                }
+                
+                // If no cache and retries left, retry
+                if (retryCount < maxRetries) {
+                    console.warn(`No products loaded, retrying... (${retryCount + 1}/${maxRetries})`);
+                    // Wait 1 second before retry
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    return this.loadProductsWithRetry(silent, retryCount + 1, maxRetries);
+                }
             }
         } catch (error) {
-            // Retry on error
+            // Try to restore from cache on error
+            if (this.ensureProductsFromCache()) {
+                console.log('Products restored from cache after error in retry');
+                return; // Success with cached products
+            }
+            
+            // Retry on error if retries left
             if (retryCount < maxRetries) {
                 console.warn(`Error loading products, retrying... (${retryCount + 1}/${maxRetries}):`, error);
                 // Wait 1 second before retry
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 return this.loadProductsWithRetry(silent, retryCount + 1, maxRetries);
             } else {
-                throw error; // Re-throw if max retries reached
+                // Final fallback - try cache one more time
+                if (this.ensureProductsFromCache()) {
+                    console.log('Products restored from cache as final fallback');
+                    return; // Success with cached products
+                }
+                throw error; // Re-throw if max retries reached and no cache
             }
         }
     }
@@ -158,7 +205,15 @@ class POSSystem {
                 return false;
             }
             
-            this.products = JSON.parse(cachedData);
+            const parsedProducts = JSON.parse(cachedData);
+            
+            // Validate cached products
+            if (!Array.isArray(parsedProducts) || parsedProducts.length === 0) {
+                console.warn('Cached products are invalid or empty');
+                return false;
+            }
+            
+            this.products = parsedProducts;
             
             // Update last view time when loading from cache
             this.updateLastViewTime();
@@ -170,14 +225,52 @@ class POSSystem {
         }
     }
     
+    // Ensure products are loaded from cache if available
+    ensureProductsFromCache() {
+        // If products array is empty, try to load from cache
+        if (this.products.length === 0) {
+            const loaded = this.loadProductsFromCache();
+            if (loaded && this.products.length > 0) {
+                console.log('Products restored from cache');
+                return true;
+            }
+        }
+        return this.products.length > 0;
+    }
+    
     // Save products to cache
     saveProductsToCache(products) {
         try {
+            // Only save if products array is valid and not empty
+            if (!Array.isArray(products) || products.length === 0) {
+                console.warn('Attempted to save empty or invalid products to cache, skipping');
+                return false;
+            }
+            
             localStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(products));
             localStorage.setItem(CACHE_TIMESTAMP_KEY, Date.now().toString());
             this.updateLastViewTime();
+            console.log(`Saved ${products.length} products to cache`);
+            return true;
         } catch (error) {
             console.error('Error saving to cache:', error);
+            return false;
+        }
+    }
+    
+    // Verify that cache was saved successfully
+    verifyCacheSaved() {
+        try {
+            const cachedData = localStorage.getItem(PRODUCTS_CACHE_KEY);
+            if (!cachedData) {
+                return false;
+            }
+            
+            const parsed = JSON.parse(cachedData);
+            return Array.isArray(parsed) && parsed.length > 0 && parsed.length === this.products.length;
+        } catch (error) {
+            console.error('Error verifying cache:', error);
+            return false;
         }
     }
 
@@ -257,18 +350,28 @@ class POSSystem {
                         }));
                     
                     if (newProducts.length === 0) {
-                        // If no products found, check if we have cached products
-                        if (this.products.length > 0) {
-                            console.warn('No products found in fresh fetch, keeping cached products');
-                            loadingOverlay.style.display = 'none';
-                            return;
+                        // If no products found, try to restore from cache
+                        if (!this.ensureProductsFromCache()) {
+                            // No cache available either - this is a real error
+                            throw new Error('No products found in CSV. Expected columns: PRODUCT, RATE');
                         }
-                        throw new Error('No products found in CSV. Expected columns: PRODUCT, RATE');
+                        console.warn('No products found in fresh fetch, keeping cached products');
+                        loadingOverlay.style.display = 'none';
+                        resolve(); // Resolve with cached products
+                        return;
                     }
                     
-                    // Only update if we got valid products
+                    // Only update if we got valid products - always save to cache
                     this.products = newProducts;
                     this.saveProductsToCache(this.products);
+                    
+                    // Verify cache was saved successfully
+                    const cacheVerified = this.verifyCacheSaved();
+                    if (!cacheVerified) {
+                        console.warn('Cache save verification failed, attempting to save again...');
+                        this.saveProductsToCache(this.products);
+                    }
+                    
                     loadingOverlay.style.display = 'none';
                     
                     // Update UI (only if not silent, or if products changed)
@@ -287,43 +390,45 @@ class POSSystem {
                     console.error('Error loading products:', error);
                     loadingOverlay.style.display = 'none';
                     
-                    // If we have cached data, use it instead of showing error
-                    if (this.cacheExists() && this.products.length > 0) {
+                    // Always try to restore from cache on error
+                    if (this.ensureProductsFromCache()) {
+                        console.log('Restored products from cache after error');
                         if (!silent) {
                             this.handleSearch('');
                         }
-                        resolve(); // Resolve even with cached data
+                        resolve(); // Resolve with cached data
                         return;
                     }
                     
-                    // Only show alert if not silent (first load)
+                    // Only show alert if not silent (first load) and no cache available
                     if (!silent) {
                         alert(`Failed to load products:\n\n${error.message || 'Unknown error occurred'}\n\nPlease check:\n1. The STORE_PRODUCTS URL in your .env file\n2. Browser console for more details\n3. That the Google Sheet is published as CSV`);
                     }
                     
-                    reject(error); // Reject promise on error
+                    reject(error); // Reject promise on error only if no cache available
                 }
             });
             } catch (error) {
                 console.error('Error loading products:', error);
                 loadingOverlay.style.display = 'none';
                 
-                // If we have cached data, use it instead of showing error
-                if (this.cacheExists() && this.products.length > 0) {
+                // Always try to restore from cache on error
+                if (this.ensureProductsFromCache()) {
+                    console.log('Restored products from cache after error');
                     if (!silent) {
                         this.handleSearch('');
                     }
-                    resolve(); // Resolve even with cached data
+                    resolve(); // Resolve with cached data
                     return;
                 }
                 
-                // Only show alert if not silent (first load)
+                // Only show alert if not silent (first load) and no cache available
                 if (!silent) {
                     const errorMessage = error.message || 'Unknown error occurred';
                     alert(`Failed to load products:\n\n${errorMessage}\n\nPlease check:\n1. The STORE_PRODUCTS URL in your .env file\n2. Browser console for more details\n3. Network tab to see if the request succeeded`);
                 }
                 
-                reject(error); // Reject promise on error
+                reject(error); // Reject promise on error only if no cache available
             }
         });
     }
@@ -332,6 +437,16 @@ class POSSystem {
     searchResults = [];
 
     handleSearch(query) {
+        // Always ensure products are available from cache before searching
+        if (!this.ensureProductsFromCache()) {
+            console.warn('No products available for search, attempting to load...');
+            // Try to load from cache one more time
+            if (!this.loadProductsFromCache()) {
+                console.error('No products available and cache is empty');
+                return;
+            }
+        }
+        
         const searchResultsDiv = document.getElementById('searchResults');
         
         if (!query.trim()) {
