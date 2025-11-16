@@ -1,9 +1,9 @@
 // Customers CSV URL - using proxy endpoint to keep URL hidden
 const CUSTOMERS_URL = '/api/customers';
 
-// Cache keys
+// Cache keys - must match script.js
 const CUSTOMERS_CACHE_KEY = 'customersCache';
-const CUSTOMERS_CACHE_KEY_PARSED = 'customersCache_parsed';
+const CUSTOMERS_CACHE_KEY_PARSED = CUSTOMERS_CACHE_KEY + '_parsed'; // Same as script.js
 const CUSTOMERS_CACHE_TIMESTAMP_KEY = 'customersCacheTimestamp';
 const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes in milliseconds
 
@@ -22,20 +22,70 @@ class CustomersManager {
     async init() {
         this.setupEventListeners();
         
-        // Load from cache first
+        // Always load from cache first to show latest data (including receipts created on index page)
         const hasCache = this.loadCustomersFromCache();
         
         if (!hasCache) {
             await this.loadCustomers(true); // Load and cache
+        } else {
+            // Cache exists - refresh customer list from cache to ensure it's up to date
+            // This ensures new customers added on index page are visible
+            this.refreshCustomerListFromCache();
         }
         
-        // Fetch fresh data in background
+        // Fetch fresh data in background (but don't overwrite if cache was just updated)
         this.loadCustomers(true).catch(error => {
             console.warn('Background customers cache refresh failed:', error);
         });
         
         // Set up periodic cache refresh (every 5 minutes)
         this.setupPeriodicRefresh();
+    }
+    
+    // Refresh customer list from cache to pick up new customers
+    refreshCustomerListFromCache() {
+        try {
+            const cachedCsv = localStorage.getItem(CUSTOMERS_CACHE_KEY);
+            if (!cachedCsv) {
+                return;
+            }
+            
+            // Re-parse the CSV to get updated customer list
+            Papa.parse(cachedCsv, {
+                header: true,
+                skipEmptyLines: true,
+                complete: (results) => {
+                    const customerSet = new Set();
+                    
+                    results.data.forEach((row) => {
+                        const customerName = row.CUSTOMER || row.customer || row.Customer || '';
+                        const trimmedName = String(customerName).trim();
+                        if (trimmedName && trimmedName !== '' && trimmedName.toUpperCase() !== 'CUSTOMER') {
+                            customerSet.add(trimmedName);
+                        }
+                    });
+                    
+                    const newCustomers = Array.from(customerSet).map(customerName => ({
+                        name: customerName
+                    }));
+                    
+                    // Update if customer list changed
+                    if (newCustomers.length !== this.customers.length || 
+                        JSON.stringify(newCustomers) !== JSON.stringify(this.customers)) {
+                        this.customers = newCustomers;
+                        this.filteredCustomers = [...this.customers];
+                        localStorage.setItem(CUSTOMERS_CACHE_KEY_PARSED, JSON.stringify(this.customers));
+                        this.displayCustomers();
+                        console.log('Refreshed customer list from cache:', this.customers.length, 'customers');
+                    }
+                },
+                error: (error) => {
+                    console.error('Error refreshing customer list from cache:', error);
+                }
+            });
+        } catch (error) {
+            console.error('Error refreshing customer list from cache:', error);
+        }
     }
     
     // Set up periodic refresh every 5 minutes
@@ -346,11 +396,11 @@ class CustomersManager {
     async loadReceipts(customerName) {
         this.showLoading();
         try {
-            // Try to load from cache first
+            // Always try to load from cache first to get latest receipts (including those created on index page)
             let csvText = localStorage.getItem(CUSTOMERS_CACHE_KEY);
             
             if (!csvText) {
-                // Load receipts from the same CSV that has customers
+                // No cache available, fetch from server
                 const response = await fetch(`${CUSTOMERS_URL}?t=${Date.now()}`);
                 if (!response.ok) {
                     throw new Error(`Failed to fetch receipts: ${response.status}`);
@@ -359,9 +409,10 @@ class CustomersManager {
                 // Save to cache
                 if (csvText) {
                     localStorage.setItem(CUSTOMERS_CACHE_KEY, csvText);
+                    localStorage.setItem(CUSTOMERS_CACHE_TIMESTAMP_KEY, Date.now().toString());
                 }
             } else {
-                console.log('Loading receipts from cache');
+                console.log('Loading receipts from cache (includes latest updates from index page)');
             }
             
             Papa.parse(csvText, {

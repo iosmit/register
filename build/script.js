@@ -402,7 +402,7 @@ class POSSystem {
                     localStorage.setItem(CUSTOMERS_CACHE_KEY, updatedCsv);
                     localStorage.setItem(CUSTOMERS_CACHE_TIMESTAMP_KEY, Date.now().toString());
                     
-                    // Update parsed customers list
+                    // Update parsed customers list to include new customer if added
                     const customerSet = new Set();
                     results.data.forEach((row) => {
                         const customerName = row.CUSTOMER || row.customer || row.Customer || '';
@@ -412,10 +412,17 @@ class POSSystem {
                         }
                     });
                     
-                    this.customers = Array.from(customerSet);
-                    localStorage.setItem(CUSTOMERS_CACHE_KEY + '_parsed', JSON.stringify(this.customers));
+                    const updatedCustomers = Array.from(customerSet).map(customerName => ({
+                        name: customerName
+                    }));
                     
-                    console.log('Updated customers cache with new receipt');
+                    // Update local customers list
+                    this.customers = updatedCustomers;
+                    
+                    // Update cache with both CSV and parsed customer list
+                    localStorage.setItem(CUSTOMERS_CACHE_KEY + '_parsed', JSON.stringify(updatedCustomers));
+                    
+                    console.log('Updated customers cache with new receipt. Customer list:', updatedCustomers.length, 'customers');
                 },
                 error: (error) => {
                     console.error('Error updating customers cache:', error);
