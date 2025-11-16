@@ -287,6 +287,77 @@
             display: flex;
             gap: 12px;
             margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #000000;
+            font-size: 14px;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #000000;
+            border-radius: 8px;
+            font-size: 16px;
+            font-family: inherit;
+            background-color: #ffffff;
+            color: #000000;
+            box-sizing: border-box;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: #000000;
+        }
+        
+        .form-input::placeholder {
+            color: #666666;
+        }
+        
+        .manual-product-modal-content {
+            padding: 0;
+        }
+        
+        .manual-product-form {
+            padding: 0 24px 24px 24px;
+        }
+        
+        .manual-product-modal-content .modal-header {
+            margin: 0;
+            padding: 24px 24px 16px 24px;
+            border-bottom: none;
+        }
+        
+        .manual-product-modal-content .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .manual-product-modal-content .form-group:last-of-type {
+            margin-bottom: 0;
+        }
+        
+        .manual-product-modal-content .modal-actions {
+            margin-top: 24px;
+            padding: 0;
+            border-top: none;
+            justify-content: flex-end;
+        }
+        
+        .manual-product-modal-content .form-input {
+            border: 1px solid #d0d0d0;
+        }
+        
+        .manual-product-modal-content .form-input:focus {
+            border-color: #000000;
         }
         
         .input-fields-container {
@@ -298,6 +369,7 @@
         .customer-name-container {
             flex: 1;
             order: 2; /* Second on desktop */
+            position: relative;
         }
         
         .search-container {
@@ -325,6 +397,49 @@
         
         .customer-name-input::placeholder {
             color: #666666;
+        }
+        
+        .customer-name-results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: #ffffff;
+            border: none;
+            border-radius: 0;
+            margin-top: 8px;
+            max-height: 500px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .customer-name-result-item {
+            padding: 16px 20px;
+            cursor: pointer;
+            border-bottom: 1px solid #e0e0e0;
+            transition: background-color 0.2s;
+        }
+        
+        .customer-name-result-item:hover {
+            background-color: #f9f9f9;
+        }
+        
+        .customer-name-result-item:last-child {
+            border-bottom: none;
+        }
+        
+        .customer-name-result-text {
+            font-weight: 500;
+            color: #000000;
+            font-size: 16px;
+        }
+        
+        .customer-name-result-text mark {
+            background-color: #ffeb3b;
+            padding: 2px 4px;
+            border-radius: 3px;
         }
         
         .cart-items {
@@ -556,41 +671,47 @@
             top: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0, 0, 0, 0.7);
+            background-color: rgba(0, 0, 0, 0.5);
             overflow: visible;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal.active {
+            display: flex;
         }
         
         .modal-content {
             background-color: #ffffff;
-            margin: 5% auto;
+            margin: auto;
             padding: 0;
-            border-radius: 0;
+            border-radius: 8px;
             width: 90%;
             max-width: 480px;
             max-height: 90vh;
             overflow-y: auto;
             overflow-x: visible;
-            border: 1px solid #d0d0d0;
-            box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+            border: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
             position: relative;
-            padding-bottom: 20px;
+            padding-bottom: 0;
             -webkit-overflow-scrolling: touch;
-            border-radius: 0;
         }
         
         .modal-header {
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            padding: 20px 24px;
-            border-bottom: 1px solid #e0e0e0;
+            align-items: flex-start;
+            padding: 24px 24px 16px 24px;
+            border-bottom: none;
         }
         
         .modal-header h2 {
             margin: 0;
             color: #000000;
             font-size: 20px;
-            font-weight: 600;
+            font-weight: 700;
+            flex: 1;
         }
         
         .modal-header .btn {
@@ -601,15 +722,22 @@
         .close-btn {
             background: none;
             border: none;
-            font-size: 32px;
+            font-size: 24px;
             cursor: pointer;
-            color: #000000;
+            color: #666666;
             line-height: 1;
-            transition: opacity 0.2s;
+            transition: color 0.2s;
+            padding: 0;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-left: 16px;
         }
         
         .close-btn:hover {
-            opacity: 0.7;
+            color: #000000;
         }
         
         .receipt-content {
@@ -630,15 +758,17 @@
         
         .modal-actions {
             display: flex;
-            justify-content: center;
-            padding: 24px 32px 34px 32px;
-            border-top: 1px solid #e0e0e0;
+            justify-content: flex-end;
+            gap: 12px;
+            padding: 0;
+            border-top: none;
             position: relative;
             z-index: 1;
         }
         
         .modal-actions .btn {
-            max-width: 200px;
+            max-width: none;
+            min-width: 100px;
         }
         
         /* Loading Overlay */
@@ -760,6 +890,7 @@
             <div class="cart-actions">
                 <button id="checkoutBtn" class="btn btn-primary" disabled>Checkout</button>
                 <button id="clearCartBtn" class="btn btn-secondary" disabled>Clear Cart</button>
+                <button id="addManualProductBtn" class="btn btn-secondary">Add Product Manually</button>
             </div>
             <div class="input-fields-container">
                 <div class="customer-name-container">
@@ -769,7 +900,9 @@
                         placeholder="Customer Name (required)" 
                         class="customer-name-input"
                         required
+                        autocomplete="off"
                     >
+                    <div id="customerNameResults" class="customer-name-results"></div>
                 </div>
                 <div class="search-container">
                     <input 
@@ -789,6 +922,30 @@
         </section>
     </div>
 
+    <!-- Manual Product Modal -->
+    <div id="manualProductModal" class="modal">
+        <div class="modal-content manual-product-modal-content">
+            <div class="modal-header">
+                <h2>Add Product Manually</h2>
+                <button class="close-btn" id="closeManualProductModal">&times;</button>
+            </div>
+            <form id="manualProductForm" class="manual-product-form">
+                <div class="form-group">
+                    <label for="manualProductName">Product Name</label>
+                    <input type="text" id="manualProductName" class="form-input" required placeholder="Enter product name">
+                </div>
+                <div class="form-group">
+                    <label for="manualProductRate">Rate (₹)</label>
+                    <input type="number" id="manualProductRate" class="form-input" required step="0.01" min="0" placeholder="0.00">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelManualProductBtn">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add to Cart</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
     <!-- Receipt Modal -->
     <div id="receiptModal" class="modal">
         <div class="modal-content">

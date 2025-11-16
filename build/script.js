@@ -13,6 +13,7 @@ class POSSystem {
     constructor() {
         this.products = [];
         this.cart = [];
+        this.customers = [];
         this.cacheRefreshInterval = null;
         this.cacheRefreshTimeout = null;
         this.init();
@@ -20,6 +21,9 @@ class POSSystem {
 
     async init() {
         this.setupEventListeners();
+        
+        // Load customers for autocomplete
+        this.loadCustomers();
         
         // Step 1: Always check cache first on page load for immediate display
         const hasCache = this.loadProductsFromCache();
@@ -187,6 +191,118 @@ class POSSystem {
         }
     }
     
+    // Load customers from CSV for autocomplete
+    async loadCustomers() {
+        try {
+            const response = await fetch('/api/customers?t=' + Date.now());
+            if (!response.ok) {
+                console.warn('Failed to load customers for autocomplete');
+                return;
+            }
+
+            const csvText = await response.text();
+            
+            Papa.parse(csvText, {
+                header: true,
+                skipEmptyLines: true,
+                quotes: true,
+                escapeChar: '"',
+                delimiter: ',',
+                newline: '\n',
+                complete: (results) => {
+                    const customerSet = new Set();
+                    
+                    results.data.forEach(row => {
+                        const customerName = row.CUSTOMER || row.customer || row.Customer || '';
+                        const trimmedName = String(customerName).trim();
+                        
+                        if (trimmedName && trimmedName !== '' && trimmedName.toUpperCase() !== 'CUSTOMER') {
+                            customerSet.add(trimmedName);
+                        }
+                    });
+
+                    this.customers = Array.from(customerSet);
+                    console.log(`Loaded ${this.customers.length} customers for autocomplete`);
+                },
+                error: (error) => {
+                    console.error('Error parsing customers CSV:', error);
+                }
+            });
+        } catch (error) {
+            console.error('Error loading customers:', error);
+        }
+    }
+
+    // Handle customer name search/autocomplete
+    handleCustomerSearch(searchTerm) {
+        const term = searchTerm.trim().toLowerCase();
+        const resultsContainer = document.getElementById('customerNameResults');
+        
+        if (!resultsContainer) return;
+        
+        if (term === '' || this.customers.length === 0) {
+            this.clearCustomerNameResults();
+            return;
+        }
+
+        // Filter customers that match the search term
+        const matches = this.customers.filter(customer => {
+            return customer.toLowerCase().includes(term);
+        }).slice(0, 10); // Limit to 10 results
+
+        if (matches.length === 0) {
+            this.clearCustomerNameResults();
+            return;
+        }
+
+        // Highlight matching text
+        const resultsHTML = matches.map(customer => {
+            const index = customer.toLowerCase().indexOf(term);
+            if (index === -1) {
+                return `<div class="customer-name-result-item" onclick="pos.selectCustomerName('${customer.replace(/'/g, "\\'")}')">
+                    <div class="customer-name-result-text">${this.escapeHtml(customer)}</div>
+                </div>`;
+            }
+            
+            const before = customer.substring(0, index);
+            const match = customer.substring(index, index + term.length);
+            const after = customer.substring(index + term.length);
+            
+            return `<div class="customer-name-result-item" onclick="pos.selectCustomerName('${customer.replace(/'/g, "\\'")}')">
+                <div class="customer-name-result-text">${this.escapeHtml(before)}<mark>${this.escapeHtml(match)}</mark>${this.escapeHtml(after)}</div>
+            </div>`;
+        }).join('');
+
+        resultsContainer.innerHTML = resultsHTML;
+        resultsContainer.style.display = 'block';
+    }
+
+    // Select a customer name from autocomplete
+    selectCustomerName(customerName) {
+        const customerNameInput = document.getElementById('customerName');
+        if (customerNameInput) {
+            customerNameInput.value = customerName;
+            this.clearCustomerNameResults();
+            this.updateCheckoutButtonState();
+        }
+    }
+
+    // Clear customer name results
+    clearCustomerNameResults() {
+        const resultsContainer = document.getElementById('customerNameResults');
+        if (resultsContainer) {
+            resultsContainer.style.display = 'none';
+            resultsContainer.innerHTML = '';
+        }
+    }
+
+    // Escape HTML to prevent XSS
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
     // Check if cache exists
     cacheExists() {
         try {
@@ -295,10 +411,49 @@ class POSSystem {
             closeReceipt.addEventListener('click', () => this.closeReceipt());
             printReceipt.addEventListener('click', () => window.print());
             
+            // Manual product entry
+            const addManualProductBtn = document.getElementById('addManualProductBtn');
+            const closeManualProductModal = document.getElementById('closeManualProductModal');
+            const cancelManualProductBtn = document.getElementById('cancelManualProductBtn');
+            const manualProductForm = document.getElementById('manualProductForm');
+            
+            if (addManualProductBtn) {
+                addManualProductBtn.addEventListener('click', () => this.showManualProductModal());
+            }
+            if (closeManualProductModal) {
+                closeManualProductModal.addEventListener('click', () => this.closeManualProductModal());
+            }
+            if (cancelManualProductBtn) {
+                cancelManualProductBtn.addEventListener('click', () => this.closeManualProductModal());
+            }
+            if (manualProductForm) {
+                manualProductForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.addManualProduct();
+                });
+            }
+            
+            // Close manual product modal when clicking outside
+            const manualProductModal = document.getElementById('manualProductModal');
+            if (manualProductModal) {
+                manualProductModal.addEventListener('click', (e) => {
+                    if (e.target === manualProductModal) {
+                        this.closeManualProductModal();
+                    }
+                });
+            }
+            
             // Add event listener for customer name input
             const customerNameInput = document.getElementById('customerName');
             if (customerNameInput) {
-                customerNameInput.addEventListener('input', () => this.updateCheckoutButtonState());
+                customerNameInput.addEventListener('input', (e) => {
+                    this.handleCustomerSearch(e.target.value);
+                    this.updateCheckoutButtonState();
+                });
+                customerNameInput.addEventListener('blur', () => {
+                    // Hide results after a short delay to allow click events
+                    setTimeout(() => this.clearCustomerNameResults(), 200);
+                });
             }
 
         // Close modal when clicking outside
@@ -837,6 +992,72 @@ class POSSystem {
 
     closeReceipt() {
         document.getElementById('receiptModal').style.display = 'none';
+    }
+    
+    // Show manual product entry modal
+    showManualProductModal() {
+        const modal = document.getElementById('manualProductModal');
+        if (modal) {
+            modal.classList.add('active');
+            // Focus on product name input
+            const productNameInput = document.getElementById('manualProductName');
+            if (productNameInput) {
+                setTimeout(() => productNameInput.focus(), 100);
+            }
+        }
+    }
+    
+    // Close manual product entry modal
+    closeManualProductModal() {
+        const modal = document.getElementById('manualProductModal');
+        if (modal) {
+            modal.classList.remove('active');
+            // Reset form
+            const form = document.getElementById('manualProductForm');
+            if (form) {
+                form.reset();
+            }
+        }
+    }
+    
+    // Add manually entered product to cart
+    addManualProduct() {
+        const productName = document.getElementById('manualProductName').value.trim();
+        const productRate = parseFloat(document.getElementById('manualProductRate').value);
+        
+        if (!productName) {
+            alert('Please enter a product name');
+            return;
+        }
+        
+        if (isNaN(productRate) || productRate <= 0) {
+            alert('Please enter a valid rate greater than 0');
+            return;
+        }
+        
+        // Check if product already exists in cart
+        const existingItem = this.cart.find(item => item.name.toLowerCase() === productName.toLowerCase());
+        
+        if (existingItem) {
+            // Update existing item - add 1 to quantity and update rate if different
+            existingItem.quantity += 1;
+            if (existingItem.rate !== productRate) {
+                existingItem.rate = productRate;
+            }
+        } else {
+            // Add new item with quantity 1
+            this.cart.push({
+                name: productName,
+                rate: productRate,
+                quantity: 1
+            });
+        }
+        
+        // Update cart display
+        this.updateCartDisplay();
+        
+        // Close modal and reset form
+        this.closeManualProductModal();
     }
 }
 
