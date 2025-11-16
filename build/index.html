@@ -566,33 +566,47 @@
         
         /* Print Styles */
         @media print {
+            * {
+                visibility: hidden;
+            }
+            
             body {
                 background: white;
-            }
-            
-            .container > *:not(.modal) {
-                display: none;
-            }
-            
-            .modal {
-                display: block;
-                position: static;
-                background: white;
+                margin: 0;
                 padding: 0;
             }
             
+            .modal,
+            .modal * {
+                visibility: visible;
+            }
+            
+            .modal {
+                display: block !important;
+                position: fixed;
+                left: 0;
+                top: 0;
+                width: 100%;
+                height: 100%;
+                background: white;
+                z-index: 9999;
+                overflow: visible;
+            }
+            
             .modal-content {
-                margin: 0;
+                margin: 0 auto;
                 box-shadow: none;
                 max-width: 80mm;
                 width: 80mm;
                 border: none;
                 padding: 10mm;
+                max-height: none;
+                overflow: visible;
             }
             
             .modal-header,
             .modal-actions {
-                display: none;
+                display: none !important;
             }
             
             .receipt-content {
@@ -600,6 +614,14 @@
                 padding: 0;
                 max-width: 100%;
                 line-height: 1.5;
+                overflow: visible;
+            }
+            
+            /* Hide all other page elements */
+            .header,
+            .main-content,
+            .loading-overlay {
+                display: none !important;
             }
         }
     </style>
