@@ -16,6 +16,7 @@ class CustomersManager {
         this.currentReceipt = null;
         this.currentReceiptIndex = null;
         this.cacheRefreshInterval = null;
+        this.pendingDelete = null; // Store pending deletion info
         this.init();
     }
 
@@ -287,6 +288,29 @@ class CustomersManager {
         const cancelPaymentBtn = document.getElementById('cancelPaymentBtn');
         const paymentForm = document.getElementById('paymentForm');
         const customerSearch = document.getElementById('customerSearch');
+        
+        // Delete confirmation modal
+        const closeDeleteConfirmModal = document.getElementById('closeDeleteConfirmModal');
+        const cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
+        const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+        
+        if (closeDeleteConfirmModal) {
+            closeDeleteConfirmModal.addEventListener('click', () => {
+                this.closeDeleteConfirmModal();
+            });
+        }
+        
+        if (cancelDeleteBtn) {
+            cancelDeleteBtn.addEventListener('click', () => {
+                this.closeDeleteConfirmModal();
+            });
+        }
+        
+        if (confirmDeleteBtn) {
+            confirmDeleteBtn.addEventListener('click', () => {
+                this.confirmDeleteReceipt();
+            });
+        }
 
         backToCustomersBtn.addEventListener('click', () => {
             this.showCustomersView();
@@ -592,6 +616,175 @@ class CustomersManager {
         await this.loadReceipts(customerName);
         this.showReceiptsView();
     }
+    
+    // Delete a receipt - show confirmation modal
+    deleteReceipt(customerName, receiptIndex, displayIndex) {
+        // Store deletion info for confirmation
+        this.pendingDelete = {
+            customerName: customerName,
+            receiptIndex: receiptIndex,
+            displayIndex: displayIndex
+        };
+        
+        // Show confirmation modal
+        this.showDeleteConfirmModal();
+    }
+    
+    // Show delete confirmation modal
+    showDeleteConfirmModal() {
+        const modal = document.getElementById('deleteConfirmModal');
+        if (modal) {
+            modal.classList.add('active');
+        }
+    }
+    
+    // Close delete confirmation modal
+    closeDeleteConfirmModal() {
+        const modal = document.getElementById('deleteConfirmModal');
+        if (modal) {
+            modal.classList.remove('active');
+        }
+        this.pendingDelete = null;
+    }
+    
+    // Confirm and execute receipt deletion
+    async confirmDeleteReceipt() {
+        if (!this.pendingDelete) {
+            return;
+        }
+        
+        const { customerName, receiptIndex } = this.pendingDelete;
+        this.closeDeleteConfirmModal();
+        
+        this.showLoading();
+        try {
+            const response = await fetch('/api/delete-receipt', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    customerName: customerName,
+                    receiptIndex: receiptIndex
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Failed to delete receipt: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            if (result.success) {
+                // Update local cache by removing the receipt
+                this.updateCustomersCacheAfterDelete(customerName, receiptIndex);
+                
+                // Reload receipts to reflect the deletion
+                await this.loadReceipts(customerName);
+                this.displayReceipts();
+            } else {
+                throw new Error(result.error || 'Failed to delete receipt');
+            }
+        } catch (error) {
+            console.error('Error deleting receipt:', error);
+            alert('Failed to delete receipt. Please try again.');
+        } finally {
+            this.hideLoading();
+            this.pendingDelete = null;
+        }
+    }
+    
+    // Update customers cache after deleting a receipt
+    updateCustomersCacheAfterDelete(customerName, receiptIndex) {
+        try {
+            // Get cached CSV data
+            const cachedCsv = localStorage.getItem(CUSTOMERS_CACHE_KEY);
+            if (!cachedCsv) {
+                console.warn('No customers cache found to update');
+                return;
+            }
+            
+            // Parse the CSV
+            Papa.parse(cachedCsv, {
+                header: true,
+                skipEmptyLines: true,
+                complete: (results) => {
+                    // Find the customer row
+                    let customerRow = null;
+                    
+                    for (let i = 0; i < results.data.length; i++) {
+                        const row = results.data[i];
+                        const rowCustomerName = row.CUSTOMER || row.customer || row.Customer || '';
+                        if (rowCustomerName && rowCustomerName.trim().toUpperCase() === customerName.toUpperCase()) {
+                            customerRow = row;
+                            break;
+                        }
+                    }
+                    
+                    if (!customerRow) {
+                        console.warn('Customer not found in cache for receipt deletion');
+                        return;
+                    }
+                    
+                    // Find receipt columns
+                    const receiptColumns = results.meta.fields.filter(f => f.toUpperCase().startsWith('RECEIPT'));
+                    if (receiptColumns.length === 0) {
+                        console.warn('No receipt columns found in cache');
+                        return;
+                    }
+                    
+                    // Find the receipt at the specified index
+                    let receiptField = null;
+                    if (receiptIndex === 0) {
+                        receiptField = receiptColumns[0];
+                    } else {
+                        const receiptFieldName = receiptIndex === 1 ? 'RECEIPT' : `RECEIPT${receiptIndex}`;
+                        receiptField = receiptColumns.find(col => col.toUpperCase() === receiptFieldName.toUpperCase());
+                        if (!receiptField && receiptColumns[receiptIndex]) {
+                            receiptField = receiptColumns[receiptIndex];
+                        }
+                    }
+                    
+                    if (!receiptField) {
+                        console.warn('Receipt column not found at specified index');
+                        return;
+                    }
+                    
+                    // Clear the receipt cell
+                    customerRow[receiptField] = '';
+                    
+                    // Shift remaining receipts to fill the gap (move receipts from right to left)
+                    const receiptFieldIndex = results.meta.fields.indexOf(receiptField);
+                    for (let i = receiptFieldIndex + 1; i < results.meta.fields.length; i++) {
+                        const nextField = results.meta.fields[i];
+                        if (nextField && nextField.toUpperCase().startsWith('RECEIPT')) {
+                            if (customerRow[nextField]) {
+                                customerRow[receiptField] = customerRow[nextField];
+                                customerRow[nextField] = '';
+                                receiptField = nextField;
+                            }
+                        }
+                    }
+                    
+                    // Convert back to CSV and save
+                    const updatedCsv = Papa.unparse(results.data, {
+                        header: true,
+                        columns: results.meta.fields
+                    });
+                    
+                    // Update cache
+                    localStorage.setItem(CUSTOMERS_CACHE_KEY, updatedCsv);
+                    localStorage.setItem(CUSTOMERS_CACHE_TIMESTAMP_KEY, Date.now().toString());
+                    
+                    console.log('Updated customers cache after receipt deletion');
+                },
+                error: (error) => {
+                    console.error('Error updating customers cache after deletion:', error);
+                }
+            });
+        } catch (error) {
+            console.error('Error updating customers cache after receipt deletion:', error);
+        }
+    }
 
     displayReceipts() {
         const customerHeader = document.getElementById('customerHeader');
@@ -670,19 +863,28 @@ class CustomersManager {
             const remainingBalance = receipt.grandTotal - totalPaid;
             const paymentStatus = this.getPaymentStatus(receipt.grandTotal, totalPaid);
 
+            // Get the original receipt index for deletion
+            const originalIndex = receipt._originalIndex !== undefined ? receipt._originalIndex : index;
+            const escapedCustomerName = this.escapeHtml(this.currentCustomer).replace(/'/g, "\\'");
+            
             return `
-                <div class="receipt-card" onclick="customersManager.selectReceipt(${index})">
-                    <div class="receipt-header">
-                        <div>
-                            <div class="receipt-date">${this.escapeHtml(receipt.date || 'N/A')}</div>
-                            <div class="receipt-time">${this.escapeHtml(receipt.time || '')}</div>
+                <div class="receipt-card">
+                    <div class="receipt-card-content" onclick="customersManager.selectReceipt(${index})">
+                        <div class="receipt-header">
+                            <div>
+                                <div class="receipt-date">${this.escapeHtml(receipt.date || 'N/A')}</div>
+                                <div class="receipt-time">${this.escapeHtml(receipt.time || '')}</div>
+                            </div>
+                            <div class="receipt-total">₹${this.formatCurrency(receipt.grandTotal || 0)}</div>
                         </div>
-                        <div class="receipt-total">₹${this.formatCurrency(receipt.grandTotal || 0)}</div>
+                        <div class="receipt-payment-status payment-status-${paymentStatus}">
+                            ${this.getPaymentStatusText(paymentStatus)}
+                        </div>
+                        ${remainingBalance > 0 ? `<div class="remaining-balance">Remaining: ₹${this.formatCurrency(remainingBalance)}</div>` : ''}
                     </div>
-                    <div class="receipt-payment-status payment-status-${paymentStatus}">
-                        ${this.getPaymentStatusText(paymentStatus)}
-                    </div>
-                    ${remainingBalance > 0 ? `<div class="remaining-balance">Remaining: ₹${this.formatCurrency(remainingBalance)}</div>` : ''}
+                    <button class="delete-receipt-btn" onclick="event.stopPropagation(); customersManager.deleteReceipt('${escapedCustomerName}', ${originalIndex}, ${index})" title="Delete receipt">
+                        ×
+                    </button>
                 </div>
             `;
         }).join('');

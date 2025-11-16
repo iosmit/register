@@ -24,6 +24,8 @@ function doPost(e) {
     
     if (action === 'updatePayment') {
       return handleUpdatePayment(data);
+    } else if (action === 'deleteReceipt') {
+      return handleDeleteReceipt(data);
     } else {
       // Default action: save receipt
       return handleSaveReceipt(data);
@@ -269,6 +271,72 @@ function handleUpdatePayment(data) {
   // Save the updated receipt back to the sheet
   const targetCol = receiptColumns[receiptIndex];
   sheet.getRange(customerRow, targetCol).setValue(JSON.stringify(receipt));
+  
+  return ContentService.createTextOutput(JSON.stringify({success: true}))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleDeleteReceipt(data) {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = spreadsheet.getSheetByName('Customer Receipts');
+  
+  if (!sheet) {
+    return ContentService.createTextOutput(JSON.stringify({success: false, error: 'Sheet not found'}))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+  
+  const customerName = data.customerName;
+  const receiptIndex = data.receiptIndex;
+  
+  // Find the customer row
+  const lastRow = sheet.getLastRow();
+  let customerRow = null;
+  
+  for (let i = 2; i <= lastRow; i++) {
+    const rowCustomerName = sheet.getRange(i, 1).getValue();
+    if (rowCustomerName === customerName) {
+      customerRow = i;
+      break;
+    }
+  }
+  
+  if (!customerRow) {
+    return ContentService.createTextOutput(JSON.stringify({success: false, error: 'Customer not found'}))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+  
+  // Get all receipt columns for this customer
+  const lastCol = sheet.getLastColumn();
+  const receiptColumns = [];
+  
+  for (let col = 2; col <= lastCol; col++) {
+    const receiptValue = sheet.getRange(customerRow, col).getValue();
+    if (receiptValue && receiptValue !== '') {
+      receiptColumns.push(col);
+    }
+  }
+  
+  if (receiptIndex < 0 || receiptIndex >= receiptColumns.length) {
+    return ContentService.createTextOutput(JSON.stringify({success: false, error: 'Invalid receipt index'}))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+  
+  // Get the column index of the receipt to delete
+  let receiptCol = receiptColumns[receiptIndex];
+  
+  // Clear the receipt cell
+  sheet.getRange(customerRow, receiptCol).clearContent();
+  
+  // Shift remaining receipts to fill the gap (move receipts from right to left)
+  for (let col = receiptCol + 1; col <= lastCol; col++) {
+    const nextValue = sheet.getRange(customerRow, col).getValue();
+    if (nextValue && nextValue !== '') {
+      // Move this receipt to the previous column
+      sheet.getRange(customerRow, receiptCol).setValue(nextValue);
+      sheet.getRange(customerRow, col).clearContent();
+      receiptCol = col; // Update receiptCol for next iteration
+    }
+  }
   
   return ContentService.createTextOutput(JSON.stringify({success: true}))
     .setMimeType(ContentService.MimeType.JSON);
