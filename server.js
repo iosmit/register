@@ -311,6 +311,33 @@ app.post('/api/delete-customer', async (req, res) => {
     }
 });
 
+// Endpoint to verify password
+app.post('/api/verify-password', async (req, res) => {
+    try {
+        const { password } = req.body;
+        
+        if (!password) {
+            return res.status(400).json({ success: false, error: 'Password is required' });
+        }
+
+        const correctPassword = process.env.PASSWORD;
+        
+        if (!correctPassword) {
+            console.error('PASSWORD not configured in environment');
+            return res.status(500).json({ success: false, error: 'Password verification not configured' });
+        }
+
+        if (password === correctPassword) {
+            res.json({ success: true });
+        } else {
+            res.status(401).json({ success: false, error: 'Incorrect password' });
+        }
+    } catch (error) {
+        console.error('Error verifying password:', error);
+        res.status(500).json({ success: false, error: error.message || 'Failed to verify password' });
+    }
+});
+
 // Serve static files
 app.use(express.static(path.join(__dirname, 'build')));
 

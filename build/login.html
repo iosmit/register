@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="icon" type="image/x-icon" href="/favicon/favicon.ico">
+    <link rel="icon" type="image/svg+xml" href="/favicon/favicon.svg">
+    <link rel="icon" type="image/png" sizes="96x96" href="/favicon/favicon-96x96.png">
+    <link rel="apple-touch-icon" href="/favicon/apple-touch-icon.png">
+    <link rel="manifest" href="/favicon/site.webmanifest">
+    <title>Login - Shreeji's Store</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background-color: #000000;
+            color: #000000;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* Header */
+        .header {
+            background-color: #000000;
+            color: #ffffff;
+            padding: 24px 48px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            min-height: 80px;
+            margin: 0;
+        }
+        
+        .logo {
+            font-size: 48px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            text-decoration: none;
+            color: #ffffff;
+            line-height: 1.2;
+            display: inline-block;
+            padding: 0;
+            margin: 0;
+        }
+        
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 64px 32px;
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+        }
+        
+        /* Password Form */
+        .password-form-container {
+            background-color: #ffffff;
+            border: 2px solid #000000;
+            border-radius: 24px;
+            padding: 48px 32px;
+            max-width: 400px;
+            width: 100%;
+        }
+        
+        .password-form {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+        
+        .form-field {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        label {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #000000;
+        }
+        
+        input[type="password"] {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #000000;
+            border-radius: 12px;
+            font-size: 16px;
+            background-color: #ffffff;
+            color: #000000;
+            font-family: inherit;
+            transition: all 0.2s;
+            -webkit-text-size-adjust: 100%;
+            -webkit-appearance: none;
+            appearance: none;
+            box-sizing: border-box;
+        }
+        
+        input[type="password"]:focus {
+            outline: none;
+            background-color: #f9f9f9;
+            font-size: 16px;
+        }
+        
+        .submit-btn {
+            background-color: #000000;
+            color: #ffffff;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: opacity 0.2s;
+        }
+        
+        .submit-btn:hover {
+            opacity: 0.7;
+        }
+        
+        .submit-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .error-message {
+            color: #dc3545;
+            font-size: 14px;
+            margin-top: 8px;
+            margin-bottom: 0;
+            display: none;
+            text-align: center;
+        }
+        
+        .error-message.show {
+            display: block;
+        }
+        
+        input.error {
+            border-color: #dc3545 !important;
+        }
+        
+        .loading-overlay {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.8);
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #ffffff;
+        }
+        
+        .loading-overlay.active {
+            display: flex;
+        }
+        
+        .spinner {
+            border: 4px solid rgba(255,255,255,0.3);
+            border-top: 4px solid #ffffff;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header {
+                padding: 20px 24px;
+            }
+            
+            .logo {
+                font-size: 36px;
+            }
+            
+            .main-content {
+                padding: 48px 24px;
+            }
+            
+            .password-form-container {
+                padding: 32px 24px;
+            }
+            
+            input[type="password"] {
+                font-size: 16px !important;
+                -webkit-text-size-adjust: 100%;
+            }
+            
+            input[type="password"]:focus {
+                font-size: 16px !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <a href="index.html" class="logo">STORE</a>
+    </div>
+    
+    <!-- Main Content -->
+    <div class="main-content">
+        <div class="password-form-container">
+            <form class="password-form" id="loginForm">
+                <div class="form-field">
+                    <label for="password">Password</label>
+                    <input 
+                        type="password" 
+                        id="password" 
+                        name="password" 
+                        placeholder="Enter password"
+                        required
+                        autocomplete="current-password"
+                        autofocus
+                    >
+                </div>
+                <button type="submit" class="submit-btn" id="loginBtn">Continue</button>
+                <div class="error-message" id="errorMessage">Invalid password. Please try again.</div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="spinner"></div>
+        <p>Verifying password...</p>
+    </div>
+    
+    <script src="auth.js"></script>
+    <script>
+        // Check if already authenticated
+        if (authManager.isAuthenticated()) {
+            // Redirect to the page they were trying to access, or index
+            const redirectTo = sessionStorage.getItem('redirectAfterLogin') || 'index.html';
+            sessionStorage.removeItem('redirectAfterLogin');
+            window.location.href = redirectTo;
+        }
+        
+        const loginForm = document.getElementById('loginForm');
+        const passwordInput = document.getElementById('password');
+        const errorMessage = document.getElementById('errorMessage');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const loginBtn = document.getElementById('loginBtn');
+        
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            // Reset error state
+            passwordInput.classList.remove('error');
+            errorMessage.classList.remove('show');
+            loginBtn.disabled = true;
+            loginBtn.textContent = 'Verifying...';
+            
+            const password = passwordInput.value.trim();
+            
+            try {
+                const success = await authManager.verifyPassword(password);
+                
+                if (success) {
+                    // Save authentication
+                    authManager.setAuthenticated();
+                    
+                    // Redirect to the page they were trying to access, or index
+                    const redirectTo = sessionStorage.getItem('redirectAfterLogin') || 'index.html';
+                    sessionStorage.removeItem('redirectAfterLogin');
+                    window.location.href = redirectTo;
+                } else {
+                    // Password incorrect
+                    passwordInput.classList.add('error');
+                    errorMessage.classList.add('show');
+                    passwordInput.value = '';
+                    passwordInput.focus();
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                passwordInput.classList.add('error');
+                // More specific error message
+                if (error.message && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
+                    errorMessage.textContent = 'Cannot connect to server. Please check your connection and try again.';
+                } else {
+                    errorMessage.textContent = 'An error occurred. Please try again.';
+                }
+                errorMessage.classList.add('show');
+            } finally {
+                loginBtn.disabled = false;
+                loginBtn.textContent = 'Continue';
+            }
+        });
+        
+        // Focus password input on load
+        passwordInput.focus();
+    </script>
+</body>
+</html>
+
