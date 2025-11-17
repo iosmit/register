@@ -3,6 +3,7 @@ const CUSTOMERS_URL = '/api/customers';
 
 // Cache keys - must match customers.js
 const CUSTOMERS_CACHE_KEY = 'customersCache';
+const CUSTOMERS_CACHE_TIMESTAMP_KEY = 'customersCacheTimestamp';
 const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes in milliseconds
 
 class ReportManager {
@@ -19,7 +20,7 @@ class ReportManager {
     async init() {
         this.setupEventListeners();
         await this.loadReceipts();
-        this.calculateAndDisplayStats();
+        // calculateAndDisplayStats() is called in loadReceipts() after data is loaded
     }
 
     setupEventListeners() {
@@ -176,21 +177,38 @@ class ReportManager {
             // Always try to load from cache first
             let csvText = localStorage.getItem(CUSTOMERS_CACHE_KEY);
             
-            if (!csvText) {
+            if (!csvText || csvText.trim() === '') {
                 // No cache available - fetch from server
                 console.log('No customers cache found, fetching from server...');
-                const response = await fetch(`${CUSTOMERS_URL}?t=${Date.now()}`);
-                if (!response.ok) {
-                    throw new Error(`Failed to fetch receipts: ${response.status}`);
-                }
-                csvText = await response.text();
-                // Save to cache
-                if (csvText) {
+                try {
+                    const response = await fetch(`${CUSTOMERS_URL}?t=${Date.now()}`);
+                    if (!response.ok) {
+                        throw new Error(`Failed to fetch receipts: ${response.status} ${response.statusText}`);
+                    }
+                    csvText = await response.text();
+                    
+                    // Validate that we got actual data
+                    if (!csvText || csvText.trim() === '') {
+                        throw new Error('Received empty response from server');
+                    }
+                    
+                    // Save to cache
                     localStorage.setItem(CUSTOMERS_CACHE_KEY, csvText);
                     localStorage.setItem(CUSTOMERS_CACHE_TIMESTAMP_KEY, Date.now().toString());
+                    console.log('Fetched and cached customers data from server');
+                } catch (fetchError) {
+                    console.error('Error fetching from server:', fetchError);
+                    this.hideLoading();
+                    this.showError(`Failed to load receipts from server: ${fetchError.message}. Please check your connection and try again.`);
+                    return;
                 }
             } else {
                 console.log('Loading receipts from cache');
+            }
+            
+            // Validate csvText before parsing
+            if (!csvText || csvText.trim() === '') {
+                throw new Error('No data available to parse');
             }
             
             Papa.parse(csvText, {
@@ -201,62 +219,80 @@ class ReportManager {
                 delimiter: ',',
                 newline: '\n',
                 complete: (results) => {
-                    const receipts = [];
-                    
-                    // Extract all receipts from all customers
-                    results.data.forEach((row) => {
-                        const rowKeys = Object.keys(row);
+                    try {
+                        const receipts = [];
                         
-                        // Sort keys to maintain column order
-                        const sortedKeys = rowKeys.sort((a, b) => {
-                            if (a.toUpperCase() === 'CUSTOMER') return -1;
-                            if (b.toUpperCase() === 'CUSTOMER') return 1;
-                            return a.localeCompare(b);
-                        });
+                        // Check if we have valid data
+                        if (!results.data || results.data.length === 0) {
+                            console.log('No customer data found in CSV');
+                            this.allReceipts = [];
+                            this.filteredReceipts = [];
+                            this.hideLoading();
+                            this.calculateAndDisplayStats();
+                            return;
+                        }
                         
-                        for (const key of sortedKeys) {
-                            if (key.toUpperCase() !== 'CUSTOMER') {
-                                const receiptValue = row[key];
-                                if (receiptValue && receiptValue.trim() !== '') {
-                                    try {
-                                        let receiptJson = receiptValue;
-                                        
-                                        // Try to parse it
-                                        if (typeof receiptJson === 'string') {
-                                            receiptJson = receiptJson.trim();
-                                            if (receiptJson.startsWith('"') && receiptJson.endsWith('"')) {
-                                                receiptJson = receiptJson.slice(1, -1);
-                                            }
-                                            receiptJson = receiptJson.replace(/""/g, '"');
+                        // Extract all receipts from all customers
+                        results.data.forEach((row) => {
+                            const rowKeys = Object.keys(row);
+                            
+                            // Sort keys to maintain column order
+                            const sortedKeys = rowKeys.sort((a, b) => {
+                                if (a.toUpperCase() === 'CUSTOMER') return -1;
+                                if (b.toUpperCase() === 'CUSTOMER') return 1;
+                                return a.localeCompare(b);
+                            });
+                            
+                            for (const key of sortedKeys) {
+                                if (key.toUpperCase() !== 'CUSTOMER') {
+                                    const receiptValue = row[key];
+                                    if (receiptValue && receiptValue.trim() !== '') {
+                                        try {
+                                            let receiptJson = receiptValue;
                                             
-                                            const receipt = JSON.parse(receiptJson);
-                                            receipts.push(receipt);
-                                        } else {
-                                            receipts.push(receiptJson);
+                                            // Try to parse it
+                                            if (typeof receiptJson === 'string') {
+                                                receiptJson = receiptJson.trim();
+                                                if (receiptJson.startsWith('"') && receiptJson.endsWith('"')) {
+                                                    receiptJson = receiptJson.slice(1, -1);
+                                                }
+                                                receiptJson = receiptJson.replace(/""/g, '"');
+                                                
+                                                const receipt = JSON.parse(receiptJson);
+                                                receipts.push(receipt);
+                                            } else {
+                                                receipts.push(receiptJson);
+                                            }
+                                        } catch (e) {
+                                            console.error('Error parsing receipt JSON:', e);
+                                            // Continue processing other receipts
                                         }
-                                    } catch (e) {
-                                        console.error('Error parsing receipt JSON:', e);
                                     }
                                 }
                             }
-                        }
-                    });
+                        });
 
-                    console.log(`Loaded ${receipts.length} receipts`);
-                    this.allReceipts = receipts;
-                    this.filteredReceipts = [...receipts];
-                    this.hideLoading();
+                        console.log(`Loaded ${receipts.length} receipts`);
+                        this.allReceipts = receipts;
+                        this.filteredReceipts = [...receipts];
+                        this.hideLoading();
+                        this.calculateAndDisplayStats();
+                    } catch (parseError) {
+                        console.error('Error processing parsed data:', parseError);
+                        this.hideLoading();
+                        this.showError('Failed to process receipt data. Please try again.');
+                    }
                 },
                 error: (error) => {
                     console.error('Error parsing receipts CSV:', error);
                     this.hideLoading();
-                    this.showError('Failed to load receipts. Please try again.');
+                    this.showError(`Failed to parse receipt data: ${error.message || 'Unknown error'}. Please try again.`);
                 }
             });
         } catch (error) {
             console.error('Error loading receipts:', error);
             this.hideLoading();
-            this.showError('Failed to load receipts. Please try again.');
+            this.showError(`Failed to load receipts: ${error.message || 'Unknown error'}. Please try again.`);
         }
     }
 
