@@ -5,6 +5,7 @@ const CUSTOMERS_URL = '/api/customers';
 const CUSTOMERS_CACHE_KEY = 'customersCache';
 const CUSTOMERS_CACHE_KEY_PARSED = CUSTOMERS_CACHE_KEY + '_parsed'; // Same as script.js
 const CUSTOMERS_CACHE_TIMESTAMP_KEY = 'customersCacheTimestamp';
+const PRODUCTS_CACHE_KEY = 'storeProductsCache'; // For calculating profit margin
 const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes in milliseconds
 
 class CustomersManager {
@@ -17,11 +18,75 @@ class CustomersManager {
         this.currentReceiptIndex = null;
         this.cacheRefreshInterval = null;
         this.pendingDelete = null; // Store pending deletion info
+        this.products = []; // Store products for profit margin calculation
         this.init();
+    }
+    
+    // Load products from cache for profit margin calculation
+    loadProductsFromCache() {
+        try {
+            const cachedData = localStorage.getItem(PRODUCTS_CACHE_KEY);
+            if (!cachedData) {
+                return false;
+            }
+            
+            const parsedProducts = JSON.parse(cachedData);
+            
+            if (!Array.isArray(parsedProducts) || parsedProducts.length === 0) {
+                return false;
+            }
+            
+            this.products = parsedProducts;
+            return true;
+        } catch (error) {
+            console.error('Error loading products from cache:', error);
+            return false;
+        }
+    }
+    
+    // Calculate profit margin for a receipt on-the-fly
+    calculateProfitMarginForReceipt(receipt) {
+        if (!receipt.items || !Array.isArray(receipt.items)) {
+            return 0;
+        }
+        
+        // If products list is empty, try to reload it
+        if (this.products.length === 0) {
+            this.loadProductsFromCache();
+        }
+        
+        let totalProfitMargin = 0;
+        
+        receipt.items.forEach(item => {
+            // Get purchase cost from item (if stored) or from products list
+            let purchaseCost = 0;
+            
+            if (item.purchaseCost !== undefined && item.purchaseCost !== null) {
+                purchaseCost = parseFloat(item.purchaseCost) || 0;
+            } else {
+                // Look up purchase cost from products list
+                const product = this.products.find(p => p.name === item.name);
+                if (product && product.purchaseCost !== undefined) {
+                    purchaseCost = parseFloat(product.purchaseCost) || 0;
+                }
+            }
+            
+            // Calculate profit margin for this item
+            const itemRate = parseFloat(item.rate) || 0;
+            const itemQuantity = parseFloat(item.quantity) || 0;
+            const profitPerUnit = itemRate - purchaseCost;
+            const profitMargin = profitPerUnit * itemQuantity;
+            totalProfitMargin += profitMargin;
+        });
+        
+        return totalProfitMargin;
     }
 
     async init() {
         this.setupEventListeners();
+        
+        // Load products from cache for profit margin calculation
+        this.loadProductsFromCache();
         
         // Always load from cache first to show latest data (including receipts created on index page)
         const hasCache = this.loadCustomersFromCache();
@@ -423,6 +488,11 @@ class CustomersManager {
         // Always try to load from cache first
         const hasCache = this.loadCustomersFromCache();
         
+        // Ensure products are loaded for profit margin calculation
+        if (this.products.length === 0) {
+            this.loadProductsFromCache();
+        }
+        
         if (hasCache && this.customers.length > 0) {
             // Cache exists and has data
             // Only fetch if cache is stale (older than 5 minutes)
@@ -502,6 +572,9 @@ class CustomersManager {
                     // Save to cache (always update cache with fresh data)
                     // Use silent mode for background refreshes to reduce console noise
                     this.saveCustomersToCache(csvText, this.customers, silent);
+                    
+                    // Reload products after cache refresh to ensure we have latest purchase costs
+                    this.loadProductsFromCache();
 
                     if (this.customers.length === 0) {
                         console.warn('No customers found in CSV');
@@ -535,6 +608,11 @@ class CustomersManager {
     async loadReceipts(customerName) {
         this.showLoading();
         try {
+            // Ensure products are loaded for profit margin calculation
+            if (this.products.length === 0) {
+                this.loadProductsFromCache();
+            }
+            
             // Always try to load from cache first to get latest receipts (including those created on index page)
             // Receipts are always loaded from cache - they're updated via cache updates, not network fetches
             let csvText = localStorage.getItem(CUSTOMERS_CACHE_KEY);
@@ -553,28 +631,70 @@ class CustomersManager {
                     localStorage.setItem(CUSTOMERS_CACHE_KEY, csvText);
                     localStorage.setItem(CUSTOMERS_CACHE_TIMESTAMP_KEY, Date.now().toString());
                 }
+                // Reload products after fetching fresh data
+                this.loadProductsFromCache();
             } else {
                 // Cache exists - use it (receipts are updated via cache updates, not network fetches)
                 console.log('Loading receipts from cache (includes latest updates from index page)');
+                // Ensure products are still loaded (in case cache was cleared)
+                if (this.products.length === 0) {
+                    this.loadProductsFromCache();
+                }
             }
             
+            // Parse CSV twice: once with headers to find the customer, once without to get raw data
+            // This is necessary because PapaParse collapses duplicate column names
             Papa.parse(csvText, {
-                header: true,
+                header: false,
                 skipEmptyLines: true,
                 quotes: true,
                 escapeChar: '"',
                 delimiter: ',',
                 newline: '\n',
-                complete: (results) => {
+                complete: (rawResults) => {
                     console.log('Parsing receipts for customer:', customerName);
                     
-                    // Find the row for this customer
-                    const customerRow = results.data.find(row => {
-                        const rowCustomerName = row.CUSTOMER || row.customer || row.Customer || '';
-                        return String(rowCustomerName).trim() === customerName;
-                    });
-
-                    if (!customerRow) {
+                    if (!rawResults.data || rawResults.data.length === 0) {
+                        console.warn('No data in CSV');
+                        this.receipts = [];
+                        this.currentCustomer = customerName;
+                        this.displayReceipts();
+                        this.hideLoading();
+                        return;
+                    }
+                    
+                    // First row is headers
+                    const headers = rawResults.data[0] || [];
+                    
+                    // Find CUSTOMER column index
+                    const customerColumnIndex = headers.findIndex(h => 
+                        h && String(h).trim().toUpperCase() === 'CUSTOMER'
+                    );
+                    
+                    if (customerColumnIndex === -1) {
+                        console.warn('CUSTOMER column not found in CSV');
+                        this.receipts = [];
+                        this.currentCustomer = customerName;
+                        this.displayReceipts();
+                        this.hideLoading();
+                        return;
+                    }
+                    
+                    // Find the customer row
+                    let customerRowIndex = -1;
+                    let customerRowData = null;
+                    
+                    for (let i = 1; i < rawResults.data.length; i++) {
+                        const row = rawResults.data[i];
+                        const rowCustomerName = row[customerColumnIndex];
+                        if (rowCustomerName && String(rowCustomerName).trim() === customerName) {
+                            customerRowIndex = i;
+                            customerRowData = row;
+                            break;
+                        }
+                    }
+                    
+                    if (!customerRowData) {
                         console.warn('Customer not found in CSV:', customerName);
                         this.receipts = [];
                         this.currentCustomer = customerName;
@@ -582,53 +702,57 @@ class CustomersManager {
                         this.hideLoading();
                         return;
                     }
-
-                    // Extract all receipt columns (all columns except CUSTOMER)
-                    // Store both the receipt data and its original column index
+                    
+                    // Extract all receipt columns by iterating through headers
                     const receipts = [];
-                    const rowKeys = Object.keys(customerRow);
+                    let receiptColumnIndex = 0;
                     
-                    // Sort keys to maintain column order (RECEIPT, RECEIPT, RECEIPT, etc.)
-                    const sortedKeys = rowKeys.sort((a, b) => {
-                        // Keep CUSTOMER first, then RECEIPT columns in order
-                        if (a.toUpperCase() === 'CUSTOMER') return -1;
-                        if (b.toUpperCase() === 'CUSTOMER') return 1;
-                        return a.localeCompare(b);
-                    });
-                    
-                    let receiptColumnIndex = 0; // Track the column index (0-based, starting from first RECEIPT column)
-                    
-                    for (const key of sortedKeys) {
-                        if (key.toUpperCase() !== 'CUSTOMER') {
-                            const receiptValue = customerRow[key];
-                            if (receiptValue && receiptValue.trim() !== '') {
+                    for (let i = 0; i < headers.length; i++) {
+                        const header = headers[i];
+                        const headerUpper = header ? String(header).trim().toUpperCase() : '';
+                        
+                        // Skip CUSTOMER column
+                        if (headerUpper === 'CUSTOMER') {
+                            continue;
+                        }
+                        
+                        // Check if this is a RECEIPT column
+                        if (headerUpper.startsWith('RECEIPT')) {
+                            const receiptValue = customerRowData[i];
+                            
+                            if (receiptValue && String(receiptValue).trim() !== '') {
                                 try {
                                     // The receipt is stored as a JSON string, but it might be double-encoded
-                                    let receiptJson = receiptValue;
+                                    let receiptJson = String(receiptValue).trim();
                                     
-                                    // Try to parse it - it might be a string that needs to be parsed
-                                    if (typeof receiptJson === 'string') {
-                                        // Remove surrounding quotes if present
-                                        receiptJson = receiptJson.trim();
-                                        if (receiptJson.startsWith('"') && receiptJson.endsWith('"')) {
-                                            receiptJson = receiptJson.slice(1, -1);
-                                        }
-                                        // Unescape JSON (handle double quotes)
-                                        receiptJson = receiptJson.replace(/""/g, '"');
-                                        
-                                        const receipt = JSON.parse(receiptJson);
-                                        // Store the original column index with the receipt
-                                        receipt._originalIndex = receiptColumnIndex;
-                                        receipts.push(receipt);
-                                    } else {
-                                        receiptJson._originalIndex = receiptColumnIndex;
-                                        receipts.push(receiptJson);
+                                    // Remove surrounding quotes if present
+                                    if (receiptJson.startsWith('"') && receiptJson.endsWith('"')) {
+                                        receiptJson = receiptJson.slice(1, -1);
                                     }
+                                    // Unescape JSON (handle double quotes)
+                                    receiptJson = receiptJson.replace(/""/g, '"');
+                                    
+                                    const receipt = JSON.parse(receiptJson);
+                                    // Store the original column index with the receipt
+                                    receipt._originalIndex = receiptColumnIndex;
+                                    
+                                    // Ensure profitMargin is a number (handle string conversions from CSV)
+                                    if (receipt.profitMargin !== undefined) {
+                                        receipt.profitMargin = parseFloat(receipt.profitMargin) || 0;
+                                    }
+                                    
+                                    receipts.push(receipt);
                                     receiptColumnIndex++;
                                 } catch (e) {
                                     console.error('Error parsing receipt JSON:', e);
-                                    console.error('Receipt value:', receiptValue.substring(0, 200));
+                                    console.error('Receipt value:', String(receiptValue).substring(0, 200));
+                                    console.error('Column index:', i, 'Header:', header);
+                                    // Still increment index to maintain order
+                                    receiptColumnIndex++;
                                 }
+                            } else {
+                                // Empty receipt column - still count it to maintain index
+                                receiptColumnIndex++;
                             }
                         }
                     }
@@ -1245,7 +1369,16 @@ class CustomersManager {
             const totalPaid = (receipt.payments?.cash || 0) + (receipt.payments?.online || 0);
             const remainingBalance = receipt.grandTotal - totalPaid;
             const paymentStatus = this.getPaymentStatus(receipt.grandTotal, totalPaid);
-            const profitMargin = receipt.profitMargin !== undefined ? receipt.profitMargin : 0;
+            
+            // Use profitMargin from receipt if available (from CSV), otherwise calculate on-the-fly
+            let profitMargin = receipt.profitMargin;
+            if (profitMargin === undefined || profitMargin === null) {
+                // Calculate profit margin on-the-fly for receipts that don't have it
+                profitMargin = this.calculateProfitMarginForReceipt(receipt);
+            } else {
+                // Ensure it's a number (handle string conversions from CSV)
+                profitMargin = parseFloat(profitMargin) || 0;
+            }
 
             // Get the original receipt index for deletion
             const originalIndex = receipt._originalIndex !== undefined ? receipt._originalIndex : index;
