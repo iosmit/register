@@ -148,6 +148,14 @@ function handleSaveReceipt(data) {
     sheet.getRange(newCustomerRow, 2).setValue(receiptJson);
   }
   
+  // Update stock quantities after saving receipt
+  try {
+    updateStockQuantities(spreadsheet, items);
+  } catch (stockError) {
+    // Log error but don't fail the receipt save
+    console.error('Error updating stock:', stockError);
+  }
+  
   return ContentService.createTextOutput(JSON.stringify({success: true}))
     .setMimeType(ContentService.MimeType.JSON);
 }
@@ -409,6 +417,127 @@ function handleGetAllCustomers() {
   return ContentService.createTextOutput(JSON.stringify({success: true, customers: customers}))
     .setMimeType(ContentService.MimeType.JSON);
 }
+
+function updateStockQuantities(spreadsheet, items) {
+  // Find the products sheet - try common names first, then first sheet
+  let productsSheet = null;
+  const sheetNames = ['Products List', 'Sheet1', 'Products', 'Product List', 'Store Products'];
+  
+  for (const name of sheetNames) {
+    productsSheet = spreadsheet.getSheetByName(name);
+    if (productsSheet) break;
+  }
+  
+  // If not found, try the first sheet (index 0)
+  if (!productsSheet) {
+    const sheets = spreadsheet.getSheets();
+    if (sheets.length > 0) {
+      // Skip "Customer Receipts" sheet if it exists
+      for (let i = 0; i < sheets.length; i++) {
+        if (sheets[i].getName() !== 'Customer Receipts') {
+          productsSheet = sheets[i];
+          break;
+        }
+      }
+      // If only Customer Receipts exists, use first sheet anyway
+      if (!productsSheet && sheets.length > 0) {
+        productsSheet = sheets[0];
+      }
+    }
+  }
+  
+  if (!productsSheet) {
+    console.error('Products sheet not found');
+    return;
+  }
+  
+  // Get header row to find column indices
+  const headerRow = 1;
+  const lastCol = productsSheet.getLastColumn();
+  const headers = productsSheet.getRange(headerRow, 1, 1, lastCol).getValues()[0];
+  
+  // Find column indices (case-insensitive)
+  let productColIndex = -1;
+  let stockColIndex = -1;
+  
+  for (let i = 0; i < headers.length; i++) {
+    const header = String(headers[i] || '').trim().toUpperCase();
+    if (header === 'PRODUCT' || header === 'PRODUCT NAME' || header === 'ITEM') {
+      productColIndex = i + 1; // Column index is 1-based
+    }
+    if (header === 'STOCK INFO' || header === 'STOCK' || header === 'QUANTITY' || header === 'QTY') {
+      stockColIndex = i + 1; // Column index is 1-based
+    }
+  }
+  
+  if (productColIndex === -1) {
+    console.error('PRODUCT column not found in products sheet');
+    return;
+  }
+  
+  if (stockColIndex === -1) {
+    console.error('STOCK INFO column not found in products sheet');
+    return;
+  }
+  
+  // Get all product data
+  const lastRow = productsSheet.getLastRow();
+  if (lastRow < 2) {
+    console.error('No product data found');
+    return;
+  }
+  
+  // Create a map of product names to row numbers for quick lookup
+  const productMap = {};
+  for (let row = 2; row <= lastRow; row++) {
+    const productName = String(productsSheet.getRange(row, productColIndex).getValue() || '').trim();
+    if (productName) {
+      // Store both exact match and uppercase match for flexibility
+      productMap[productName] = row;
+      productMap[productName.toUpperCase()] = row;
+    }
+  }
+  
+  // Update stock for each item in the receipt
+  for (const item of items) {
+    const itemName = String(item.name || '').trim();
+    const quantity = parseFloat(item.quantity || 0);
+    
+    if (!itemName || quantity <= 0) {
+      continue;
+    }
+    
+    // Try to find the product row
+    let productRow = productMap[itemName] || productMap[itemName.toUpperCase()];
+    
+    // If not found, try case-insensitive search
+    if (!productRow) {
+      for (const [key, row] of Object.entries(productMap)) {
+        if (key.toUpperCase() === itemName.toUpperCase()) {
+          productRow = row;
+          break;
+        }
+      }
+    }
+    
+    if (!productRow) {
+      console.warn('Product not found in sheet:', itemName);
+      continue;
+    }
+    
+    // Get current stock value
+    const currentStockCell = productsSheet.getRange(productRow, stockColIndex);
+    const currentStock = parseFloat(currentStockCell.getValue() || 0);
+    
+    // Calculate new stock (decrement by quantity sold)
+    const newStock = Math.max(0, currentStock - quantity);
+    
+    // Update stock value
+    currentStockCell.setValue(newStock);
+    
+    console.log(`Updated stock for ${itemName}: ${currentStock} -> ${newStock} (sold ${quantity})`);
+  }
+}
 ```
 
 3. Click **Save** (💾) and give your project a name (e.g., "Receipt Webhook")
@@ -468,9 +597,27 @@ Jane Smith| {"date":"15/11/2025","time":"11:00...     | ...                     
 
 **Important**: When a new receipt is added for an existing customer, all existing receipts are shifted one column to the right, and the new (latest) receipt is always placed in column 2.
 
+## Stock Management
+
+The script automatically updates stock quantities when receipts are generated:
+
+1. **Products Sheet**: The script looks for a sheet containing products (prioritizes "Products List", then tries "Sheet1", "Products", "Product List", or the first sheet)
+2. **Required Columns**: 
+   - **PRODUCT** (or "PRODUCT NAME", "ITEM") - Product name column
+   - **STOCK INFO** (or "STOCK", "QUANTITY", "QTY") - Stock quantity column (next to PURCHASE COST)
+3. **How it works**: 
+   - When a receipt is saved, the script finds each product in the receipt
+   - It decrements the STOCK INFO column by the quantity sold
+   - Stock cannot go below 0 (negative stock is prevented)
+4. **Product Matching**: Products are matched by name (case-insensitive)
+   - If a product in the receipt isn't found in the products sheet, a warning is logged but the receipt is still saved
+
+**Note**: Stock updates happen automatically after each receipt is saved. If stock update fails, the receipt is still saved successfully (errors are logged but don't block receipt saving).
+
 ## Notes
 
 - The webhook runs silently in the background - errors won't interrupt the receipt display
 - If saving fails, check the browser console for error messages
 - Make sure your Google Apps Script has permission to edit the sheet
+- Stock updates require the products sheet to have PRODUCT and STOCK INFO columns
 

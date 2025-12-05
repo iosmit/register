@@ -783,7 +783,8 @@ class POSSystem {
                         .map(row => ({
                             name: String(row.PRODUCT || '').trim(),
                             rate: parseFloat(row.RATE || 0),
-                            purchaseCost: parseFloat(row['PURCHASE COST'] || row.PURCHASECOST || row['PURCHASE_COST'] || 0)
+                            purchaseCost: parseFloat(row['PURCHASE COST'] || row.PURCHASECOST || row['PURCHASE_COST'] || 0),
+                            stock: parseFloat(row['STOCK INFO'] || row.STOCKINFO || row['STOCK_INFO'] || row.STOCK || row.QUANTITY || row.QTY || 0)
                         }));
                     
                     if (newProducts.length === 0) {
@@ -911,12 +912,20 @@ class POSSystem {
         const displayResults = this.searchResults.slice(0, maxResults);
         const hasMore = this.searchResults.length > maxResults;
 
-        searchResultsDiv.innerHTML = displayResults.map((product, index) => `
+        searchResultsDiv.innerHTML = displayResults.map((product, index) => {
+            const stock = product.stock || 0;
+            const stockText = stock > 0 ? `Stock: ${stock}` : 'Out of stock';
+            const stockClass = stock > 0 ? 'product-stock' : 'product-stock out-of-stock';
+            return `
             <div class="search-result-item" data-index="${index}">
                 <span class="product-name">${highlight ? this.highlightMatch(product.name, query) : product.name}</span>
-                <span class="product-rate">₹${product.rate.toFixed(2)}</span>
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                    <span class="product-rate">₹${product.rate.toFixed(2)}</span>
+                    <span class="${stockClass}">${stockText}</span>
+                </div>
             </div>
-        `).join('') + (hasMore ? `<div class="more-results">+ ${this.searchResults.length - maxResults} more products (refine your search)</div>` : '');
+        `;
+        }).join('') + (hasMore ? `<div class="more-results">+ ${this.searchResults.length - maxResults} more products (refine your search)</div>` : '');
 
         searchResultsDiv.style.display = 'block';
 
@@ -1033,7 +1042,8 @@ class POSSystem {
                 name: product.name,
                 rate: product.rate,
                 quantity: quantity,
-                purchaseCost: product.purchaseCost || 0
+                purchaseCost: product.purchaseCost || 0,
+                stock: product.stock || 0
             });
         }
 
@@ -1148,12 +1158,19 @@ class POSSystem {
             cartItemsDiv.innerHTML = '<p class="empty-cart">No items in cart</p>';
             clearCartBtn.disabled = true;
         } else {
-            cartItemsDiv.innerHTML = this.cart.map((item, index) => `
+            cartItemsDiv.innerHTML = this.cart.map((item, index) => {
+                // Get current stock from products array if available, otherwise use stored stock
+                const product = this.products.find(p => p.name === item.name);
+                const stock = product ? (product.stock || 0) : (item.stock || 0);
+                const stockText = stock > 0 ? `Stock: ${stock}` : 'Out of stock';
+                const stockClass = stock > 0 ? 'cart-item-stock' : 'cart-item-stock out-of-stock';
+                return `
                 <div class="cart-item" data-index="${index}">
                     <div class="cart-item-row">
                         <div class="cart-item-info">
                             <span class="cart-item-name">${item.name}</span>
                             <span class="cart-item-rate" onclick="pos.editRate(${index})" title="Click to edit rate">₹${item.rate.toFixed(2)} each</span>
+                            <span class="${stockClass}">${stockText}</span>
                         </div>
                         <div class="cart-item-right">
                             <button class="remove-btn remove-btn-desktop" onclick="pos.removeFromCart(${index})" title="Remove">×</button>
@@ -1167,7 +1184,8 @@ class POSSystem {
                         <button class="qty-btn" onclick="pos.updateQuantity(${index}, 1)">+</button>
                     </div>
                 </div>
-            `).join('');
+            `;
+            }).join('');
             clearCartBtn.disabled = false;
         }
 
