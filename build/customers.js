@@ -1245,6 +1245,7 @@ class CustomersManager {
             const totalPaid = (receipt.payments?.cash || 0) + (receipt.payments?.online || 0);
             const remainingBalance = receipt.grandTotal - totalPaid;
             const paymentStatus = this.getPaymentStatus(receipt.grandTotal, totalPaid);
+            const profitMargin = receipt.profitMargin !== undefined ? receipt.profitMargin : 0;
 
             // Get the original receipt index for deletion
             const originalIndex = receipt._originalIndex !== undefined ? receipt._originalIndex : index;
@@ -1268,7 +1269,20 @@ class CustomersManager {
                         <div class="receipt-payment-status payment-status-${paymentStatus}">
                             ${this.getPaymentStatusText(paymentStatus)}
                         </div>
-                        ${remainingBalance > 0 ? `<div class="remaining-balance">Remaining: ₹${this.formatCurrency(remainingBalance)}</div>` : ''}
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px; gap: 12px; flex-wrap: wrap;">
+                            ${remainingBalance > 0 ? `
+                                <div class="remaining-balance">Remaining: ₹${this.formatCurrency(remainingBalance)}</div>
+                            ` : ''}
+                            ${profitMargin > 0 ? `
+                                <div style="font-size: 14px; color: #28a745; font-weight: 600;">
+                                    Profit: ₹${this.formatCurrency(profitMargin)}
+                                </div>
+                            ` : profitMargin < 0 ? `
+                                <div style="font-size: 14px; color: #dc3545; font-weight: 600;">
+                                    Loss: ₹${this.formatCurrency(Math.abs(profitMargin))}
+                                </div>
+                            ` : ''}
+                        </div>
                     </div>
                     <button class="view-receipt-btn" onclick="event.stopPropagation(); customersManager.viewReceipt(${index})" title="View receipt">
                         View Receipt

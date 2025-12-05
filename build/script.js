@@ -394,6 +394,7 @@ class POSSystem {
                         time: receiptData.time,
                         items: receiptData.items,
                         grandTotal: receiptData.grandTotal,
+                        profitMargin: receiptData.profitMargin || 0,
                         payments: {
                             cash: 0,
                             online: 0
@@ -781,7 +782,8 @@ class POSSystem {
                         })
                         .map(row => ({
                             name: String(row.PRODUCT || '').trim(),
-                            rate: parseFloat(row.RATE || 0)
+                            rate: parseFloat(row.RATE || 0),
+                            purchaseCost: parseFloat(row['PURCHASE COST'] || row.PURCHASECOST || row['PURCHASE_COST'] || 0)
                         }));
                     
                     if (newProducts.length === 0) {
@@ -1030,7 +1032,8 @@ class POSSystem {
             this.cart.push({
                 name: product.name,
                 rate: product.rate,
-                quantity: quantity
+                quantity: quantity,
+                purchaseCost: product.purchaseCost || 0
             });
         }
 
@@ -1237,6 +1240,26 @@ class POSSystem {
         
         console.log(`Generating receipt with ${cartItems.length} items:`, cartItems.map(item => item.name));
         
+        // Calculate profit margin for each item and total
+        let totalProfitMargin = 0;
+        const receiptItems = cartItems.map(item => {
+            // Get purchase cost from item (if manually added) or from products list
+            const purchaseCost = item.purchaseCost !== undefined ? item.purchaseCost : 
+                (this.products.find(p => p.name === item.name)?.purchaseCost || 0);
+            const profitPerUnit = item.rate - purchaseCost;
+            const profitMargin = profitPerUnit * item.quantity;
+            totalProfitMargin += profitMargin;
+            
+            return {
+                name: item.name,
+                quantity: item.quantity,
+                rate: item.rate,
+                total: item.rate * item.quantity,
+                purchaseCost: purchaseCost,
+                profitMargin: profitMargin
+            };
+        });
+        
         const grandTotal = cartItems.reduce((sum, item) => sum + (item.rate * item.quantity), 0);
 
         // Detect mobile screen
@@ -1329,13 +1352,9 @@ class POSSystem {
             customerName: customerName,
             date: dateStr,
             time: timeStr,
-            items: cartItems.map(item => ({
-                name: item.name,
-                quantity: item.quantity,
-                rate: item.rate,
-                total: item.rate * item.quantity
-            })),
-            grandTotal: grandTotal
+            items: receiptItems,
+            grandTotal: grandTotal,
+            profitMargin: totalProfitMargin
         });
     }
     
@@ -1664,10 +1683,13 @@ class POSSystem {
             }
         } else {
             // Add new item with quantity 1
+            // Try to find product in products list to get purchase cost
+            const product = this.products.find(p => p.name.toLowerCase() === productName.toLowerCase());
             this.cart.push({
                 name: productName,
                 rate: productRate,
-                quantity: 1
+                quantity: 1,
+                purchaseCost: product ? (product.purchaseCost || 0) : 0
             });
         }
         
