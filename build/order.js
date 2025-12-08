@@ -1247,9 +1247,6 @@ class OrderSystem {
         const hasMore = this.searchResults.length > maxResults;
 
         searchResultsDiv.innerHTML = displayResults.map((product, index) => {
-            const stock = product.stock || 0;
-            const stockText = stock > 0 ? `Stock: ${stock}` : 'Out of stock';
-            const stockClass = stock > 0 ? 'product-stock' : 'product-stock out-of-stock';
             const effectivePrice = this.getEffectivePrice(product);
             const priceDisplay = `<span class="product-rate">₹${effectivePrice.toFixed(2)}</span>`;
             return `
@@ -1257,7 +1254,6 @@ class OrderSystem {
                 <span class="product-name">${highlight ? this.highlightMatch(product.name, query) : product.name}</span>
                 <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
                     ${priceDisplay}
-                    <span class="${stockClass}">${stockText}</span>
                 </div>
             </div>
         `;
@@ -1422,17 +1418,12 @@ class OrderSystem {
         } else {
             if (cartItemsDiv) {
                 cartItemsDiv.innerHTML = this.cart.map((item, index) => {
-                    const product = this.products.find(p => p.name === item.name);
-                    const stock = product ? (product.stock || 0) : (item.stock || 0);
-                    const stockText = stock > 0 ? `Stock: ${stock}` : 'Out of stock';
-                    const stockClass = stock > 0 ? 'cart-item-stock' : 'cart-item-stock out-of-stock';
                     return `
                     <div class="cart-item" data-index="${index}">
                         <div class="cart-item-row">
                             <div class="cart-item-info">
                                 <span class="cart-item-name">${item.name}</span>
                                 <span class="cart-item-rate">₹${item.rate.toFixed(2)} each</span>
-                                <span class="${stockClass}">${stockText}</span>
                             </div>
                             <div class="cart-item-right">
                                 <button class="remove-btn remove-btn-desktop" onclick="orderSystem.removeFromCart(${index})" title="Remove">×</button>
