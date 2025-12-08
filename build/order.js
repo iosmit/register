@@ -1059,7 +1059,6 @@ class OrderSystem {
         const placeOrderBtn = document.getElementById('placeOrderBtn');
         const clearCartBtn = document.getElementById('clearCartBtn');
         const closeOrderModal = document.getElementById('closeOrderModal');
-        const closeOrderBtn = document.getElementById('closeOrderBtn');
         const customerNameBtn = document.getElementById('customerNameBtn');
         const printOrderBtn = document.getElementById('printOrder');
         const shareOrderBtn = document.getElementById('shareOrder');
@@ -1080,8 +1079,12 @@ class OrderSystem {
             closeOrderModal.addEventListener('click', () => this.closeOrderModal());
         }
         
-        if (closeOrderBtn) {
-            closeOrderBtn.addEventListener('click', () => this.closeOrderModal());
+        if (printOrderBtn) {
+            printOrderBtn.addEventListener('click', () => window.print());
+        }
+        
+        if (shareOrderBtn) {
+            shareOrderBtn.addEventListener('click', () => this.shareOrder());
         }
         
         if (customerNameBtn) {

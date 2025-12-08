@@ -934,7 +934,8 @@
         .receipt-modal.active,
         .receipt-modal[style*="flex"],
         #receiptViewModal[style*="flex"],
-        #pendingOrderViewModal[style*="flex"] {
+        #pendingOrderViewModal[style*="flex"],
+        #orderModal[style*="flex"] {
             display: flex !important;
         }
         
@@ -1281,19 +1282,16 @@
     </div>
     
     <!-- Order Confirmation Modal -->
-    <div id="orderModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
+    <div id="orderModal" class="modal receipt-modal">
+        <div class="modal-content receipt-modal-content">
+            <div class="modal-header receipt-modal-header">
                 <div style="display: flex; gap: 12px;">
                     <button id="printOrder" class="btn btn-primary">Print</button>
                     <button id="shareOrder" class="btn btn-secondary">Share</button>
                 </div>
                 <button class="close-btn" id="closeOrderModal">&times;</button>
             </div>
-            <div class="order-content" id="orderContent"></div>
-            <div class="modal-actions" style="padding: 24px;">
-                <button id="closeOrderBtn" class="btn btn-primary">Close</button>
-            </div>
+            <div class="receipt-content" id="orderContent"></div>
         </div>
     </div>
     
