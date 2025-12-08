@@ -1289,6 +1289,9 @@ class CustomersManager {
                 // Remove from pending orders
                 delete this.pendingOrders[this.pendingOrderCustomer];
                 
+                // Update cache immediately so the page feels responsive
+                this.savePendingOrdersToCache();
+                
                 // Refresh display
                 this.displayCustomers();
                 
