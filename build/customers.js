@@ -6,6 +6,8 @@ const CUSTOMERS_CACHE_KEY = 'customersCache';
 const CUSTOMERS_CACHE_KEY_PARSED = CUSTOMERS_CACHE_KEY + '_parsed'; // Same as script.js
 const CUSTOMERS_CACHE_TIMESTAMP_KEY = 'customersCacheTimestamp';
 const PRODUCTS_CACHE_KEY = 'storeProductsCache'; // For calculating profit margin
+const PENDING_ORDERS_CACHE_KEY = 'pendingOrdersCache';
+const PENDING_ORDERS_CACHE_TIMESTAMP_KEY = 'pendingOrdersCacheTimestamp';
 const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes in milliseconds
 
 class CustomersManager {
@@ -122,10 +124,73 @@ class CustomersManager {
         this.setupPeriodicRefresh();
     }
     
-    // Load pending orders from Customer Orders sheet
-    async loadPendingOrders() {
+    // Check if pending orders cache is stale
+    isPendingOrdersCacheStale() {
         try {
-            const response = await fetch('/api/customer-orders');
+            const cacheTimestamp = localStorage.getItem(PENDING_ORDERS_CACHE_TIMESTAMP_KEY);
+            if (!cacheTimestamp) return true;
+            const cacheTime = parseInt(cacheTimestamp, 10);
+            return (Date.now() - cacheTime) >= CACHE_DURATION_MS;
+        } catch (error) {
+            return true;
+        }
+    }
+    
+    // Load pending orders from cache
+    loadPendingOrdersFromCache() {
+        try {
+            const cachedData = localStorage.getItem(PENDING_ORDERS_CACHE_KEY);
+            if (!cachedData) return false;
+            
+            const parsed = JSON.parse(cachedData);
+            if (parsed && typeof parsed === 'object') {
+                this.pendingOrders = parsed;
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error('Error loading pending orders from cache:', error);
+            return false;
+        }
+    }
+    
+    // Save pending orders to cache
+    savePendingOrdersToCache() {
+        try {
+            localStorage.setItem(PENDING_ORDERS_CACHE_KEY, JSON.stringify(this.pendingOrders));
+            localStorage.setItem(PENDING_ORDERS_CACHE_TIMESTAMP_KEY, Date.now().toString());
+        } catch (error) {
+            console.error('Error saving pending orders to cache:', error);
+        }
+    }
+    
+    // Load pending orders from Customer Orders sheet
+    async loadPendingOrders(silent = false) {
+        // Always try to load from cache first
+        const hasCache = this.loadPendingOrdersFromCache();
+        
+        if (hasCache) {
+            // Cache exists - check if it's stale
+            const isStale = this.isPendingOrdersCacheStale();
+            
+            if (!isStale) {
+                // Cache is fresh (less than 5 minutes old) - use it, don't fetch
+                this.displayCustomers();
+                // Still refresh in background to pick up new orders (but don't wait)
+                this.loadPendingOrdersFromServer(true).catch(err => {
+                    console.error('Error refreshing pending orders in background:', err);
+                });
+                return; // Use cached data, don't wait for fetch
+            }
+        }
+        
+        // Only fetch if cache is missing or stale
+        await this.loadPendingOrdersFromServer(silent);
+    }
+    
+    async loadPendingOrdersFromServer(silent = false) {
+        try {
+            const response = await fetch(`/api/customer-orders?t=${Date.now()}`);
             if (!response.ok) {
                 console.warn('Failed to load customer orders');
                 return;
@@ -139,6 +204,8 @@ class CustomersManager {
                 skipEmptyLines: true,
                 complete: (results) => {
                     if (!results.data || results.data.length < 2) {
+                        this.savePendingOrdersToCache();
+                        this.displayCustomers();
                         return;
                     }
                     
@@ -168,15 +235,23 @@ class CustomersManager {
                         }
                     }
                     
+                    // Save to cache
+                    this.savePendingOrdersToCache();
                     // Refresh display to show badges
                     this.displayCustomers();
                 },
                 error: (error) => {
                     console.error('Error parsing customer orders CSV:', error);
+                    this.pendingOrders = {};
+                    this.savePendingOrdersToCache();
+                    this.displayCustomers();
                 }
             });
         } catch (error) {
             console.error('Error loading pending orders:', error);
+            this.pendingOrders = {};
+            this.savePendingOrdersToCache();
+            this.displayCustomers();
         }
     }
     
@@ -235,8 +310,9 @@ class CustomersManager {
         
         // Refresh cache every 5 minutes - flush old cache and replace with fresh data
         this.cacheRefreshInterval = setInterval(() => {
-            console.log('Periodic customers cache refresh triggered - flushing and replacing cache');
+            console.log('Periodic cache refresh triggered - flushing and replacing cache');
             this.flushAndRefreshCache();
+            this.flushAndRefreshPendingOrdersCache();
         }, CACHE_DURATION_MS);
     }
     
@@ -256,6 +332,24 @@ class CustomersManager {
             console.log('Customers cache refreshed with fresh data');
         } catch (error) {
             console.error('Error flushing and refreshing customers cache:', error);
+        }
+    }
+    
+    // Flush old pending orders cache and replace with fresh data
+    async flushAndRefreshPendingOrdersCache() {
+        try {
+            // Clear old cache
+            localStorage.removeItem(PENDING_ORDERS_CACHE_KEY);
+            localStorage.removeItem(PENDING_ORDERS_CACHE_TIMESTAMP_KEY);
+            
+            console.log('Pending orders cache flushed, fetching fresh data...');
+            
+            // Fetch fresh data and save to cache
+            await this.loadPendingOrdersFromServer(true);
+            
+            console.log('Pending orders cache refreshed with fresh data');
+        } catch (error) {
+            console.error('Error flushing and refreshing pending orders cache:', error);
         }
     }
     
@@ -1059,6 +1153,9 @@ class CustomersManager {
             if (result.success) {
                 // Remove from pending orders
                 delete this.pendingOrders[this.pendingOrderCustomer];
+                
+                // Update pending orders cache immediately
+                this.savePendingOrdersToCache();
                 
                 // Refresh display
                 this.displayCustomers();
