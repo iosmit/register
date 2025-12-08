@@ -1885,8 +1885,6 @@ class CustomersManager {
                 
                 // Close modal
                 this.closeSpecialPricesModal();
-                
-                alert('Special prices saved successfully!');
             } else {
                 throw new Error(result.error || 'Failed to save special prices');
             }
