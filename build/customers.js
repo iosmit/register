@@ -6,6 +6,10 @@ const CUSTOMERS_CACHE_KEY = 'customersCache';
 const CUSTOMERS_CACHE_KEY_PARSED = CUSTOMERS_CACHE_KEY + '_parsed'; // Same as script.js
 const CUSTOMERS_CACHE_TIMESTAMP_KEY = 'customersCacheTimestamp';
 const PRODUCTS_CACHE_KEY = 'storeProductsCache'; // For calculating profit margin
+const PENDING_ORDERS_CACHE_KEY = 'pendingOrdersCache';
+const PENDING_ORDERS_CACHE_TIMESTAMP_KEY = 'pendingOrdersCacheTimestamp';
+const SPECIAL_PRICES_CACHE_KEY = 'specialPricesCache';
+const SPECIAL_PRICES_CACHE_TIMESTAMP_KEY = 'specialPricesCacheTimestamp';
 const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes in milliseconds
 
 class CustomersManager {
@@ -92,7 +96,7 @@ class CustomersManager {
         // Load products from cache for profit margin calculation
         this.loadProductsFromCache();
         
-        // Load pending orders
+        // Load pending orders (will load from cache first if available and fresh)
         await this.loadPendingOrders();
         
         // Always load from cache first to show latest data (including receipts created on index page)
@@ -126,15 +130,108 @@ class CustomersManager {
     
     // Load pending orders from Customer Orders sheet
     async loadPendingOrders() {
+        // Always try to load from cache first
+        const hasCache = this.loadPendingOrdersFromCache();
+        
+        if (hasCache) {
+            // Cache exists - check if it's stale
+            const isStale = this.isPendingOrdersCacheStale();
+            
+            if (!isStale) {
+                // Cache is fresh (less than 5 minutes old) - use it, don't fetch
+                console.log('Using fresh pending orders cache');
+                this.displayCustomers();
+                return; // Use cached data, don't fetch
+            } else {
+                // Cache is stale - will fetch below
+                console.log('Pending orders cache is stale, fetching fresh data...');
+            }
+        }
+        
+        // Only fetch if cache is missing or stale
+        await this.loadPendingOrdersFromServer();
+    }
+    
+    // Load pending orders from cache
+    loadPendingOrdersFromCache() {
+        try {
+            const cachedData = localStorage.getItem(PENDING_ORDERS_CACHE_KEY);
+            const cachedSpecialPrices = localStorage.getItem(SPECIAL_PRICES_CACHE_KEY);
+            
+            if (cachedData) {
+                const parsed = JSON.parse(cachedData);
+                this.pendingOrders = parsed.pendingOrders || {};
+                this.specialPrices = parsed.specialPrices || {};
+                
+                // Also load special prices if available separately
+                if (cachedSpecialPrices) {
+                    try {
+                        const specialPricesData = JSON.parse(cachedSpecialPrices);
+                        this.specialPrices = { ...this.specialPrices, ...specialPricesData };
+                    } catch (e) {
+                        console.error('Error parsing special prices cache:', e);
+                    }
+                }
+                
+                console.log(`Loaded ${Object.keys(this.pendingOrders).length} pending orders and ${Object.keys(this.specialPrices).length} special price sets from cache`);
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error('Error loading pending orders from cache:', error);
+            return false;
+        }
+    }
+    
+    // Check if pending orders cache is stale
+    isPendingOrdersCacheStale() {
+        try {
+            const cacheTimestamp = localStorage.getItem(PENDING_ORDERS_CACHE_TIMESTAMP_KEY);
+            if (!cacheTimestamp) {
+                return true;
+            }
+            const cacheTime = parseInt(cacheTimestamp, 10);
+            const timeSinceCache = Date.now() - cacheTime;
+            const isStale = timeSinceCache >= CACHE_DURATION_MS;
+            return isStale;
+        } catch (error) {
+            console.error('Error checking pending orders cache staleness:', error);
+            return true; // On error, consider it stale
+        }
+    }
+    
+    // Save pending orders to cache
+    savePendingOrdersToCache() {
+        try {
+            const cacheData = {
+                pendingOrders: this.pendingOrders,
+                specialPrices: this.specialPrices
+            };
+            localStorage.setItem(PENDING_ORDERS_CACHE_KEY, JSON.stringify(cacheData));
+            localStorage.setItem(PENDING_ORDERS_CACHE_TIMESTAMP_KEY, Date.now().toString());
+            
+            // Also save special prices separately for easy access
+            localStorage.setItem(SPECIAL_PRICES_CACHE_KEY, JSON.stringify(this.specialPrices));
+            localStorage.setItem(SPECIAL_PRICES_CACHE_TIMESTAMP_KEY, Date.now().toString());
+        } catch (error) {
+            console.error('Error saving pending orders to cache:', error);
+        }
+    }
+    
+    // Load pending orders from server
+    async loadPendingOrdersFromServer() {
         try {
             const response = await fetch('/api/customer-orders');
             if (!response.ok) {
                 console.warn('Failed to load customer orders');
+                // Try to use cache if fetch fails
+                this.loadPendingOrdersFromCache();
                 return;
             }
             
             const csvText = await response.text();
             this.pendingOrders = {};
+            this.specialPrices = {};
             
             Papa.parse(csvText, {
                 header: false,
@@ -190,15 +287,22 @@ class CustomersManager {
                         }
                     }
                     
+                    // Save to cache
+                    this.savePendingOrdersToCache();
+                    
                     // Refresh display to show badges
                     this.displayCustomers();
                 },
                 error: (error) => {
                     console.error('Error parsing customer orders CSV:', error);
+                    // Try to use cache if parsing fails
+                    this.loadPendingOrdersFromCache();
                 }
             });
         } catch (error) {
             console.error('Error loading pending orders:', error);
+            // Try to use cache if fetch fails
+            this.loadPendingOrdersFromCache();
         }
     }
     
@@ -286,8 +390,9 @@ class CustomersManager {
         
         // Refresh cache every 5 minutes - flush old cache and replace with fresh data
         this.cacheRefreshInterval = setInterval(() => {
-            console.log('Periodic customers cache refresh triggered - flushing and replacing cache');
+            console.log('Periodic cache refresh triggered - flushing and replacing cache');
             this.flushAndRefreshCache();
+            this.flushAndRefreshPendingOrdersCache();
         }, CACHE_DURATION_MS);
     }
     
@@ -307,6 +412,26 @@ class CustomersManager {
             console.log('Customers cache refreshed with fresh data');
         } catch (error) {
             console.error('Error flushing and refreshing customers cache:', error);
+        }
+    }
+    
+    // Flush old pending orders cache and replace with fresh data
+    async flushAndRefreshPendingOrdersCache() {
+        try {
+            // Clear old cache
+            localStorage.removeItem(PENDING_ORDERS_CACHE_KEY);
+            localStorage.removeItem(PENDING_ORDERS_CACHE_TIMESTAMP_KEY);
+            localStorage.removeItem(SPECIAL_PRICES_CACHE_KEY);
+            localStorage.removeItem(SPECIAL_PRICES_CACHE_TIMESTAMP_KEY);
+            
+            console.log('Pending orders cache flushed, fetching fresh data...');
+            
+            // Fetch fresh data and save to cache
+            await this.loadPendingOrdersFromServer();
+            
+            console.log('Pending orders cache refreshed with fresh data');
+        } catch (error) {
+            console.error('Error flushing and refreshing pending orders cache:', error);
         }
     }
     
@@ -1749,10 +1874,13 @@ class CustomersManager {
             const result = await updateResponse.json();
             
             if (result.success !== false) {
-                // Update local cache
+                // Update local cache immediately
                 this.specialPrices[customerName] = specialPrices;
                 
-                // Reload pending orders to refresh special prices
+                // Save to cache immediately so it's available right away
+                this.savePendingOrdersToCache();
+                
+                // Reload pending orders to refresh special prices (will use cache if fresh)
                 await this.loadPendingOrders();
                 
                 // Close modal
