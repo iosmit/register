@@ -961,6 +961,63 @@
             min-height: auto;
         }
         
+        /* Receipt View Modal Styles */
+        .receipt-modal {
+            z-index: 2000;
+        }
+        
+        .receipt-modal.active,
+        .receipt-modal[style*="flex"],
+        #receiptViewModal[style*="flex"] {
+            display: flex !important;
+        }
+        
+        .receipt-modal-content {
+            background-color: #ffffff;
+            margin: auto;
+            padding: 0;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 480px;
+            max-height: 90vh;
+            overflow-y: auto;
+            overflow-x: visible;
+            border: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            position: relative;
+            padding-bottom: 0;
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        .receipt-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding: 24px 24px 16px 24px;
+            border-bottom: none;
+        }
+        
+        .receipt-modal-header .btn {
+            flex: 0 0 auto;
+            max-width: 200px;
+        }
+        
+        .receipt-content {
+            padding: 32px 28px 32px 28px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 13px;
+            line-height: 1.9;
+            color: #000000;
+            background: #ffffff;
+            white-space: pre;
+            text-align: left;
+            width: 100%;
+            margin: 0 auto;
+            overflow-x: visible;
+            letter-spacing: 0.1px;
+            min-height: auto;
+        }
+        
         @media (max-width: 768px) {
             .header-actions {
                 flex-wrap: wrap;
@@ -970,6 +1027,29 @@
             .customer-name-btn {
                 font-size: 14px;
                 padding: 8px 16px;
+            }
+            
+            .receipt-modal-content {
+                width: 95%;
+                margin: 2% auto;
+                max-height: 95vh;
+                overflow-y: auto;
+                overflow-x: hidden;
+                -webkit-overflow-scrolling: touch;
+            }
+            
+            .receipt-content {
+                padding: 20px 16px 40px 16px;
+                font-size: 11px;
+                line-height: 1.6;
+                overflow-x: hidden;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
+                min-height: auto;
+            }
+            
+            .receipt-modal-header {
+                padding: 16px;
             }
         }
         
@@ -1064,9 +1144,45 @@
                 overflow: visible;
             }
             
-            .modal-header,
+            .receipt-modal,
+            .receipt-modal * {
+                visibility: visible;
+            }
+            
+            .receipt-modal {
+                display: block !important;
+                position: fixed;
+                left: 0;
+                top: 0;
+                width: 100%;
+                height: 100%;
+                background: white;
+                z-index: 9999;
+                overflow: visible;
+            }
+            
+            .receipt-modal-content {
+                margin: 0 auto;
+                box-shadow: none;
+                max-width: 80mm;
+                width: 80mm;
+                border: none;
+                padding: 10mm;
+                max-height: none;
+                overflow: visible;
+            }
+            
+            .receipt-modal-header,
             .modal-actions {
                 display: none !important;
+            }
+            
+            .receipt-content {
+                font-size: 10pt;
+                padding: 0;
+                max-width: 100%;
+                line-height: 1.5;
+                overflow: visible;
             }
             
             .order-content,
@@ -1182,19 +1298,16 @@
     </div>
     
     <!-- Receipt View Modal -->
-    <div id="receiptViewModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
+    <div id="receiptViewModal" class="modal receipt-modal">
+        <div class="modal-content receipt-modal-content">
+            <div class="modal-header receipt-modal-header">
                 <div style="display: flex; gap: 12px;">
                     <button id="printReceiptView" class="btn btn-primary">Print</button>
                     <button id="shareReceiptView" class="btn btn-secondary">Share</button>
                 </div>
                 <button class="close-btn" id="closeReceiptView">&times;</button>
             </div>
-            <div class="order-content" id="receiptViewContent"></div>
-            <div class="modal-actions" style="padding: 24px;">
-                <button id="closeReceiptViewBtn" class="btn btn-primary">Close</button>
-            </div>
+            <div class="receipt-content" id="receiptViewContent"></div>
         </div>
     </div>
     

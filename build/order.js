@@ -1098,7 +1098,6 @@ class OrderSystem {
         
         const printReceiptViewBtn = document.getElementById('printReceiptView');
         const shareReceiptViewBtn = document.getElementById('shareReceiptView');
-        const closeReceiptViewBtn = document.getElementById('closeReceiptViewBtn');
         const closeReceiptView = document.getElementById('closeReceiptView');
         
         if (printReceiptViewBtn) {
@@ -1107,10 +1106,6 @@ class OrderSystem {
         
         if (shareReceiptViewBtn) {
             shareReceiptViewBtn.addEventListener('click', () => this.shareReceiptView());
-        }
-        
-        if (closeReceiptViewBtn) {
-            closeReceiptViewBtn.addEventListener('click', () => this.closeReceiptView());
         }
         
         if (closeReceiptView) {
@@ -1846,7 +1841,7 @@ class OrderSystem {
     }
     
     viewReceipt(index) {
-        // Get the receipt from the sorted display array
+        // Get the receipt from the sorted display array (same sorting as displayReceipts)
         const sortedReceipts = [...this.receipts].sort((a, b) => {
             const dateA = this.parseDate(a.date);
             const dateB = this.parseDate(b.date);
@@ -1855,7 +1850,12 @@ class OrderSystem {
             }
             const timeA = this.parseTime(a.time || '');
             const timeB = this.parseTime(b.time || '');
-            return timeB - timeA;
+            if (timeA !== timeB) {
+                return timeB - timeA;
+            }
+            const indexA = a._originalIndex !== undefined ? a._originalIndex : 999;
+            const indexB = b._originalIndex !== undefined ? b._originalIndex : 999;
+            return indexA - indexB;
         });
         
         const receipt = sortedReceipts[index];
