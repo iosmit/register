@@ -650,7 +650,7 @@ class OrderSystem {
             // Show loading
             const loadingOverlay = document.getElementById('loadingOverlay');
             if (loadingOverlay) {
-                loadingOverlay.style.display = 'flex';
+                loadingOverlay.classList.add('active');
                 const loadingText = loadingOverlay.querySelector('p');
                 if (loadingText) {
                     loadingText.textContent = 'Generating order image...';
@@ -660,7 +660,7 @@ class OrderSystem {
             // Wait a bit for any rendering to complete
             await new Promise(resolve => setTimeout(resolve, 200));
             
-            // Temporarily ensure pending order content is fully visible
+            // Temporarily ensure pending order content is fully visible and not clipped
             const originalOverflow = pendingOrderContent.style.overflow;
             const originalOverflowX = pendingOrderContent.style.overflowX;
             const originalOverflowY = pendingOrderContent.style.overflowY;
@@ -668,6 +668,7 @@ class OrderSystem {
             const originalMaxWidth = pendingOrderContent.style.maxWidth;
             const originalBoxSizing = pendingOrderContent.style.boxSizing;
             
+            // Make pending order content fully visible for capture
             pendingOrderContent.style.overflow = 'visible';
             pendingOrderContent.style.overflowX = 'visible';
             pendingOrderContent.style.overflowY = 'visible';
@@ -675,7 +676,8 @@ class OrderSystem {
             pendingOrderContent.style.maxWidth = 'none';
             pendingOrderContent.style.boxSizing = 'content-box';
             
-            const modalContent = modal.querySelector('.modal-content');
+            // Also ensure modal content doesn't clip
+            const modalContent = modal.querySelector('.receipt-modal-content');
             let canvas;
             
             if (modalContent) {
@@ -689,8 +691,43 @@ class OrderSystem {
                 modalContent.style.width = 'auto';
                 modalContent.style.maxWidth = 'none';
                 
+                // Wait for layout to update
                 await new Promise(resolve => setTimeout(resolve, 100));
                 
+                // Get the actual dimensions after making it visible
+                const orderWidth = Math.max(
+                    pendingOrderContent.scrollWidth,
+                    pendingOrderContent.offsetWidth,
+                    pendingOrderContent.getBoundingClientRect().width
+                );
+                const orderHeight = Math.max(
+                    pendingOrderContent.scrollHeight,
+                    pendingOrderContent.offsetHeight,
+                    pendingOrderContent.getBoundingClientRect().height
+                );
+                
+                // Capture the pending order content as canvas
+                canvas = await html2canvas(pendingOrderContent, {
+                    backgroundColor: '#ffffff',
+                    scale: 2, // Higher quality
+                    logging: false,
+                    useCORS: true,
+                    allowTaint: false,
+                    width: orderWidth,
+                    height: orderHeight,
+                    x: 0,
+                    y: 0,
+                    scrollX: 0,
+                    scrollY: 0
+                });
+                
+                // Restore modal content styles
+                modalContent.style.overflow = originalModalOverflow;
+                modalContent.style.overflowX = originalModalOverflowX;
+                modalContent.style.width = originalModalWidth;
+                modalContent.style.maxWidth = originalModalMaxWidth;
+            } else {
+                // Fallback if modal-content not found
                 const orderWidth = Math.max(
                     pendingOrderContent.scrollWidth,
                     pendingOrderContent.offsetWidth,
@@ -714,32 +751,6 @@ class OrderSystem {
                     y: 0,
                     scrollX: 0,
                     scrollY: 0
-                });
-                
-                modalContent.style.overflow = originalModalOverflow;
-                modalContent.style.overflowX = originalModalOverflowX;
-                modalContent.style.width = originalModalWidth;
-                modalContent.style.maxWidth = originalModalMaxWidth;
-            } else {
-                const orderWidth = Math.max(
-                    pendingOrderContent.scrollWidth,
-                    pendingOrderContent.offsetWidth,
-                    pendingOrderContent.getBoundingClientRect().width
-                );
-                const orderHeight = Math.max(
-                    pendingOrderContent.scrollHeight,
-                    pendingOrderContent.offsetHeight,
-                    pendingOrderContent.getBoundingClientRect().height
-                );
-                
-                canvas = await html2canvas(pendingOrderContent, {
-                    backgroundColor: '#ffffff',
-                    scale: 2,
-                    logging: false,
-                    useCORS: true,
-                    allowTaint: false,
-                    width: orderWidth,
-                    height: orderHeight
                 });
             }
             
@@ -781,7 +792,7 @@ class OrderSystem {
                 
                 // Hide loading
                 if (loadingOverlay) {
-                    loadingOverlay.style.display = 'none';
+                    loadingOverlay.classList.remove('active');
                     const loadingText = loadingOverlay.querySelector('p');
                     if (loadingText) {
                         loadingText.textContent = 'Loading products...';
@@ -796,7 +807,7 @@ class OrderSystem {
             // Hide loading
             const loadingOverlay = document.getElementById('loadingOverlay');
             if (loadingOverlay) {
-                loadingOverlay.style.display = 'none';
+                loadingOverlay.classList.remove('active');
                 const loadingText = loadingOverlay.querySelector('p');
                 if (loadingText) {
                     loadingText.textContent = 'Loading products...';
@@ -1089,14 +1100,6 @@ class OrderSystem {
         
         if (customerNameBtn) {
             customerNameBtn.addEventListener('click', () => this.toggleCustomerInfoView());
-        }
-        
-        if (printOrderBtn) {
-            printOrderBtn.addEventListener('click', () => window.print());
-        }
-        
-        if (shareOrderBtn) {
-            shareOrderBtn.addEventListener('click', () => this.shareOrder());
         }
         
         const printReceiptViewBtn = document.getElementById('printReceiptView');
@@ -1617,7 +1620,7 @@ class OrderSystem {
             // Show loading
             const loadingOverlay = document.getElementById('loadingOverlay');
             if (loadingOverlay) {
-                loadingOverlay.style.display = 'flex';
+                loadingOverlay.classList.add('active');
                 const loadingText = loadingOverlay.querySelector('p');
                 if (loadingText) {
                     loadingText.textContent = 'Generating order image...';
@@ -1627,7 +1630,7 @@ class OrderSystem {
             // Wait a bit for any rendering to complete
             await new Promise(resolve => setTimeout(resolve, 200));
             
-            // Temporarily ensure order content is fully visible
+            // Temporarily ensure order content is fully visible and not clipped
             const originalOverflow = orderContent.style.overflow;
             const originalOverflowX = orderContent.style.overflowX;
             const originalOverflowY = orderContent.style.overflowY;
@@ -1635,6 +1638,7 @@ class OrderSystem {
             const originalMaxWidth = orderContent.style.maxWidth;
             const originalBoxSizing = orderContent.style.boxSizing;
             
+            // Make order content fully visible for capture
             orderContent.style.overflow = 'visible';
             orderContent.style.overflowX = 'visible';
             orderContent.style.overflowY = 'visible';
@@ -1642,7 +1646,8 @@ class OrderSystem {
             orderContent.style.maxWidth = 'none';
             orderContent.style.boxSizing = 'content-box';
             
-            const modalContent = modal.querySelector('.modal-content');
+            // Also ensure modal content doesn't clip
+            const modalContent = modal.querySelector('.receipt-modal-content');
             let canvas;
             
             if (modalContent) {
@@ -1656,8 +1661,43 @@ class OrderSystem {
                 modalContent.style.width = 'auto';
                 modalContent.style.maxWidth = 'none';
                 
+                // Wait for layout to update
                 await new Promise(resolve => setTimeout(resolve, 100));
                 
+                // Get the actual dimensions after making it visible
+                const orderWidth = Math.max(
+                    orderContent.scrollWidth,
+                    orderContent.offsetWidth,
+                    orderContent.getBoundingClientRect().width
+                );
+                const orderHeight = Math.max(
+                    orderContent.scrollHeight,
+                    orderContent.offsetHeight,
+                    orderContent.getBoundingClientRect().height
+                );
+                
+                // Capture the order content as canvas
+                canvas = await html2canvas(orderContent, {
+                    backgroundColor: '#ffffff',
+                    scale: 2, // Higher quality
+                    logging: false,
+                    useCORS: true,
+                    allowTaint: false,
+                    width: orderWidth,
+                    height: orderHeight,
+                    x: 0,
+                    y: 0,
+                    scrollX: 0,
+                    scrollY: 0
+                });
+                
+                // Restore modal content styles
+                modalContent.style.overflow = originalModalOverflow;
+                modalContent.style.overflowX = originalModalOverflowX;
+                modalContent.style.width = originalModalWidth;
+                modalContent.style.maxWidth = originalModalMaxWidth;
+            } else {
+                // Fallback if modal-content not found
                 const orderWidth = Math.max(
                     orderContent.scrollWidth,
                     orderContent.offsetWidth,
@@ -1682,32 +1722,6 @@ class OrderSystem {
                     scrollX: 0,
                     scrollY: 0
                 });
-                
-                modalContent.style.overflow = originalModalOverflow;
-                modalContent.style.overflowX = originalModalOverflowX;
-                modalContent.style.width = originalModalWidth;
-                modalContent.style.maxWidth = originalModalMaxWidth;
-            } else {
-                const orderWidth = Math.max(
-                    orderContent.scrollWidth,
-                    orderContent.offsetWidth,
-                    orderContent.getBoundingClientRect().width
-                );
-                const orderHeight = Math.max(
-                    orderContent.scrollHeight,
-                    orderContent.offsetHeight,
-                    orderContent.getBoundingClientRect().height
-                );
-                
-                canvas = await html2canvas(orderContent, {
-                    backgroundColor: '#ffffff',
-                    scale: 2,
-                    logging: false,
-                    useCORS: true,
-                    allowTaint: false,
-                    width: orderWidth,
-                    height: orderHeight
-                });
             }
             
             // Restore order content styles
@@ -1720,9 +1734,7 @@ class OrderSystem {
             
             canvas.toBlob(async (blob) => {
                 if (!blob) {
-                    alert('Failed to generate order image');
-                    if (loadingOverlay) loadingOverlay.style.display = 'none';
-                    return;
+                    throw new Error('Failed to create image blob');
                 }
                 
                 const now = new Date();
@@ -1740,6 +1752,7 @@ class OrderSystem {
                 
                 const file = new File([blob], fileName, { type: 'image/jpeg' });
                 
+                // Use Web Share API if available
                 if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
                     try {
                         await navigator.share({
@@ -1749,15 +1762,19 @@ class OrderSystem {
                         });
                     } catch (shareError) {
                         if (shareError.name !== 'AbortError') {
+                            console.error('Error sharing:', shareError);
+                            // Fallback to download
                             this.downloadOrderImage(blob, fileName);
                         }
                     }
                 } else {
+                    // Fallback to download
                     this.downloadOrderImage(blob, fileName);
                 }
                 
+                // Hide loading
                 if (loadingOverlay) {
-                    loadingOverlay.style.display = 'none';
+                    loadingOverlay.classList.remove('active');
                     const loadingText = loadingOverlay.querySelector('p');
                     if (loadingText) {
                         loadingText.textContent = 'Loading products...';
@@ -1768,9 +1785,11 @@ class OrderSystem {
         } catch (error) {
             console.error('Error sharing order:', error);
             alert('Failed to share order. Please try again.');
+            
+            // Hide loading
             const loadingOverlay = document.getElementById('loadingOverlay');
             if (loadingOverlay) {
-                loadingOverlay.style.display = 'none';
+                loadingOverlay.classList.remove('active');
                 const loadingText = loadingOverlay.querySelector('p');
                 if (loadingText) {
                     loadingText.textContent = 'Loading products...';
@@ -1976,7 +1995,7 @@ class OrderSystem {
             // Show loading
             const loadingOverlay = document.getElementById('loadingOverlay');
             if (loadingOverlay) {
-                loadingOverlay.style.display = 'flex';
+                loadingOverlay.classList.add('active');
                 const loadingText = loadingOverlay.querySelector('p');
                 if (loadingText) {
                     loadingText.textContent = 'Generating receipt image...';
@@ -1986,7 +2005,7 @@ class OrderSystem {
             // Wait a bit for any rendering to complete
             await new Promise(resolve => setTimeout(resolve, 200));
             
-            // Temporarily ensure receipt content is fully visible
+            // Temporarily ensure receipt content is fully visible and not clipped
             const originalOverflow = receiptContent.style.overflow;
             const originalOverflowX = receiptContent.style.overflowX;
             const originalOverflowY = receiptContent.style.overflowY;
@@ -1994,6 +2013,7 @@ class OrderSystem {
             const originalMaxWidth = receiptContent.style.maxWidth;
             const originalBoxSizing = receiptContent.style.boxSizing;
             
+            // Make receipt content fully visible for capture
             receiptContent.style.overflow = 'visible';
             receiptContent.style.overflowX = 'visible';
             receiptContent.style.overflowY = 'visible';
@@ -2001,7 +2021,8 @@ class OrderSystem {
             receiptContent.style.maxWidth = 'none';
             receiptContent.style.boxSizing = 'content-box';
             
-            const modalContent = modal.querySelector('.modal-content');
+            // Also ensure modal content doesn't clip
+            const modalContent = modal.querySelector('.receipt-modal-content');
             let canvas;
             
             if (modalContent) {
@@ -2015,8 +2036,43 @@ class OrderSystem {
                 modalContent.style.width = 'auto';
                 modalContent.style.maxWidth = 'none';
                 
+                // Wait for layout to update
                 await new Promise(resolve => setTimeout(resolve, 100));
                 
+                // Get the actual dimensions after making it visible
+                const receiptWidth = Math.max(
+                    receiptContent.scrollWidth,
+                    receiptContent.offsetWidth,
+                    receiptContent.getBoundingClientRect().width
+                );
+                const receiptHeight = Math.max(
+                    receiptContent.scrollHeight,
+                    receiptContent.offsetHeight,
+                    receiptContent.getBoundingClientRect().height
+                );
+                
+                // Capture the receipt content as canvas
+                canvas = await html2canvas(receiptContent, {
+                    backgroundColor: '#ffffff',
+                    scale: 2, // Higher quality
+                    logging: false,
+                    useCORS: true,
+                    allowTaint: false,
+                    width: receiptWidth,
+                    height: receiptHeight,
+                    x: 0,
+                    y: 0,
+                    scrollX: 0,
+                    scrollY: 0
+                });
+                
+                // Restore modal content styles
+                modalContent.style.overflow = originalModalOverflow;
+                modalContent.style.overflowX = originalModalOverflowX;
+                modalContent.style.width = originalModalWidth;
+                modalContent.style.maxWidth = originalModalMaxWidth;
+            } else {
+                // Fallback if modal-content not found
                 const receiptWidth = Math.max(
                     receiptContent.scrollWidth,
                     receiptContent.offsetWidth,
@@ -2040,32 +2096,6 @@ class OrderSystem {
                     y: 0,
                     scrollX: 0,
                     scrollY: 0
-                });
-                
-                modalContent.style.overflow = originalModalOverflow;
-                modalContent.style.overflowX = originalModalOverflowX;
-                modalContent.style.width = originalModalWidth;
-                modalContent.style.maxWidth = originalModalMaxWidth;
-            } else {
-                const receiptWidth = Math.max(
-                    receiptContent.scrollWidth,
-                    receiptContent.offsetWidth,
-                    receiptContent.getBoundingClientRect().width
-                );
-                const receiptHeight = Math.max(
-                    receiptContent.scrollHeight,
-                    receiptContent.offsetHeight,
-                    receiptContent.getBoundingClientRect().height
-                );
-                
-                canvas = await html2canvas(receiptContent, {
-                    backgroundColor: '#ffffff',
-                    scale: 2,
-                    logging: false,
-                    useCORS: true,
-                    allowTaint: false,
-                    width: receiptWidth,
-                    height: receiptHeight
                 });
             }
             
@@ -2107,7 +2137,7 @@ class OrderSystem {
                 
                 // Hide loading
                 if (loadingOverlay) {
-                    loadingOverlay.style.display = 'none';
+                    loadingOverlay.classList.remove('active');
                     const loadingText = loadingOverlay.querySelector('p');
                     if (loadingText) {
                         loadingText.textContent = 'Loading products...';
@@ -2122,7 +2152,7 @@ class OrderSystem {
             // Hide loading
             const loadingOverlay = document.getElementById('loadingOverlay');
             if (loadingOverlay) {
-                loadingOverlay.style.display = 'none';
+                loadingOverlay.classList.remove('active');
                 const loadingText = loadingOverlay.querySelector('p');
                 if (loadingText) {
                     loadingText.textContent = 'Loading products...';
